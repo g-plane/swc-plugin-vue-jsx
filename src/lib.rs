@@ -127,62 +127,65 @@ impl VueJsxTransformVisitor {
     }
 
     fn transform_children(&mut self, children: &[JSXElementChild]) -> Expr {
-        if children.is_empty() {
-            return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
-        }
+        let elems = children
+            .iter()
+            .map(|child| match child {
+                JSXElementChild::JSXText(jsx_text) => Some(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.transform_jsx_text(jsx_text)),
+                }),
+                JSXElementChild::JSXExprContainer(JSXExprContainer {
+                    expr: JSXExpr::JSXEmptyExpr(..),
+                    ..
+                }) => None,
+                JSXElementChild::JSXExprContainer(JSXExprContainer {
+                    expr: JSXExpr::Expr(expr),
+                    ..
+                }) => Some(ExprOrSpread {
+                    spread: None,
+                    expr: expr.clone(),
+                }),
+                JSXElementChild::JSXSpreadChild(JSXSpreadChild { expr, .. }) => {
+                    Some(ExprOrSpread {
+                        spread: Some(DUMMY_SP),
+                        expr: expr.clone(),
+                    })
+                }
+                JSXElementChild::JSXElement(jsx_element) => Some(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.transform_jsx_element(&*jsx_element)),
+                }),
+                JSXElementChild::JSXFragment(jsx_fragment) => Some(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.transform_jsx_fragment(jsx_fragment)),
+                }),
+            })
+            .filter_map(|item| item)
+            .map(Some)
+            .collect::<Vec<_>>();
 
-        Expr::Object(ObjectLit {
-            span: DUMMY_SP,
-            props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: PropName::Ident(quote_ident!("default")),
-                value: Box::new(Expr::Arrow(ArrowExpr {
-                    span: DUMMY_SP,
-                    params: vec![],
-                    body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+        if elems.is_empty() {
+            Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+        } else {
+            Expr::Object(ObjectLit {
+                span: DUMMY_SP,
+                props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                    key: PropName::Ident(quote_ident!("default")),
+                    value: Box::new(Expr::Arrow(ArrowExpr {
                         span: DUMMY_SP,
-                        elems: children
-                            .iter()
-                            .map(|child| match child {
-                                JSXElementChild::JSXText(jsx_text) => ExprOrSpread {
-                                    spread: None,
-                                    expr: Box::new(self.transform_jsx_text(jsx_text)),
-                                },
-                                JSXElementChild::JSXExprContainer(JSXExprContainer {
-                                    expr: JSXExpr::JSXEmptyExpr(..),
-                                    ..
-                                }) => todo!(),
-                                JSXElementChild::JSXExprContainer(JSXExprContainer {
-                                    expr: JSXExpr::Expr(expr),
-                                    ..
-                                }) => ExprOrSpread {
-                                    spread: None,
-                                    expr: expr.clone(),
-                                },
-                                JSXElementChild::JSXSpreadChild(JSXSpreadChild {
-                                    expr, ..
-                                }) => ExprOrSpread {
-                                    spread: Some(DUMMY_SP),
-                                    expr: expr.clone(),
-                                },
-                                JSXElementChild::JSXElement(jsx_element) => ExprOrSpread {
-                                    spread: None,
-                                    expr: Box::new(self.transform_jsx_element(&*jsx_element)),
-                                },
-                                JSXElementChild::JSXFragment(jsx_fragment) => ExprOrSpread {
-                                    spread: None,
-                                    expr: Box::new(self.transform_jsx_fragment(jsx_fragment)),
-                                },
-                            })
-                            .map(Some)
-                            .collect(),
-                    }))),
-                    is_async: false,
-                    is_generator: false,
-                    type_params: None,
-                    return_type: None,
-                })),
-            })))],
-        })
+                        params: vec![],
+                        body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+                            span: DUMMY_SP,
+                            elems,
+                        }))),
+                        is_async: false,
+                        is_generator: false,
+                        type_params: None,
+                        return_type: None,
+                    })),
+                })))],
+            })
+        }
     }
 
     fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Expr {
@@ -254,6 +257,6 @@ test!(
         imports: Default::default(),
     }),
     basic,
-    r#"const App = <Comp v={afa}></Comp>;"#,
+    r#"const App = <Comp v={afa}>{}{}</Comp>;"#,
     r#""#
 );
