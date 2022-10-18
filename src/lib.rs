@@ -15,6 +15,14 @@ pub struct VueJsxTransformVisitor {
 }
 
 impl VueJsxTransformVisitor {
+    fn transform_tag(&mut self, jsx_element_name: &JSXElementName) -> Expr {
+        match jsx_element_name {
+            JSXElementName::Ident(ident) => Expr::Ident(ident.clone()),
+            JSXElementName::JSXMemberExpr(expr) => Expr::JSXMember(expr.clone()),
+            JSXElementName::JSXNamespacedName(name) => Expr::JSXNamespacedName(name.clone()),
+        }
+    }
+
     fn transform_props(&mut self) -> ObjectLit {
         todo!()
     }
@@ -58,19 +66,9 @@ impl VisitMut for VueJsxTransformVisitor {
                         .clone(),
                 ))),
                 args: vec![
-                    match &jsx.opening.name {
-                        JSXElementName::Ident(ident) => ExprOrSpread {
-                            spread: None,
-                            expr: Box::new(Expr::Ident(ident.clone())),
-                        },
-                        JSXElementName::JSXMemberExpr(expr) => ExprOrSpread {
-                            spread: None,
-                            expr: Box::new(Expr::JSXMember(expr.clone())),
-                        },
-                        JSXElementName::JSXNamespacedName(name) => ExprOrSpread {
-                            spread: None,
-                            expr: Box::new(Expr::JSXNamespacedName(name.clone())),
-                        },
+                    ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(self.transform_tag(&jsx.opening.name)),
                     },
                     ExprOrSpread {
                         spread: None,
