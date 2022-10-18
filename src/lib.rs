@@ -15,6 +15,69 @@ pub struct VueJsxTransformVisitor {
 }
 
 impl VueJsxTransformVisitor {
+    fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
+        Expr::Call(CallExpr {
+            span: DUMMY_SP,
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.imports
+                    .entry("createVNode")
+                    .or_insert_with_key(|name| private_ident!(*name))
+                    .clone(),
+            ))),
+            args: vec![
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.transform_tag(&jsx_element.opening.name)),
+                },
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(if jsx_element.opening.attrs.is_empty() {
+                        Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+                    } else {
+                        Expr::Object(self.transform_attrs(&jsx_element.opening.attrs))
+                    }),
+                },
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.transform_children(&jsx_element.children)),
+                },
+            ],
+            type_args: None,
+        })
+    }
+
+    fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
+        Expr::Call(CallExpr {
+            span: DUMMY_SP,
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.imports
+                    .entry("createVNode")
+                    .or_insert_with_key(|name| private_ident!(*name))
+                    .clone(),
+            ))),
+            args: vec![
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Ident(
+                        self.imports
+                            .entry("Fragment")
+                            .or_insert_with_key(|name| private_ident!(*name))
+                            .clone(),
+                    )),
+                },
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))),
+                },
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.transform_children(&jsx_fragment.children)),
+                },
+            ],
+            type_args: None,
+        })
+    }
+
     fn transform_tag(&mut self, jsx_element_name: &JSXElementName) -> Expr {
         match jsx_element_name {
             JSXElementName::Ident(ident) => Expr::Ident(ident.clone()),
@@ -70,6 +133,82 @@ impl VueJsxTransformVisitor {
                 .collect(),
         }
     }
+
+    fn transform_children(&mut self, children: &[JSXElementChild]) -> Expr {
+        if children.is_empty() {
+            return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
+        }
+
+        Expr::Object(ObjectLit {
+            span: DUMMY_SP,
+            props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: PropName::Ident(quote_ident!("default")),
+                value: Box::new(Expr::Arrow(ArrowExpr {
+                    span: DUMMY_SP,
+                    params: vec![],
+                    body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+                        span: DUMMY_SP,
+                        elems: children
+                            .iter()
+                            .map(|child| match child {
+                                JSXElementChild::JSXText(jsx_text) => ExprOrSpread {
+                                    spread: None,
+                                    expr: Box::new(self.transform_jsx_text(jsx_text)),
+                                },
+                                JSXElementChild::JSXExprContainer(JSXExprContainer {
+                                    expr: JSXExpr::JSXEmptyExpr(..),
+                                    ..
+                                }) => todo!(),
+                                JSXElementChild::JSXExprContainer(JSXExprContainer {
+                                    expr: JSXExpr::Expr(expr),
+                                    ..
+                                }) => ExprOrSpread {
+                                    spread: None,
+                                    expr: expr.clone(),
+                                },
+                                JSXElementChild::JSXSpreadChild(JSXSpreadChild {
+                                    expr, ..
+                                }) => ExprOrSpread {
+                                    spread: Some(DUMMY_SP),
+                                    expr: expr.clone(),
+                                },
+                                JSXElementChild::JSXElement(jsx_element) => ExprOrSpread {
+                                    spread: None,
+                                    expr: Box::new(self.transform_jsx_element(&*jsx_element)),
+                                },
+                                JSXElementChild::JSXFragment(jsx_fragment) => ExprOrSpread {
+                                    spread: None,
+                                    expr: Box::new(self.transform_jsx_fragment(jsx_fragment)),
+                                },
+                            })
+                            .map(Some)
+                            .collect(),
+                    }))),
+                    is_async: false,
+                    is_generator: false,
+                    type_params: None,
+                    return_type: None,
+                })),
+            })))],
+        })
+    }
+
+    fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Expr {
+        Expr::Call(CallExpr {
+            span: DUMMY_SP,
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.imports
+                    .entry("createTextVNode")
+                    .or_insert_with_key(|name| private_ident!(*name))
+                    .clone(),
+            ))),
+            args: vec![ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Lit(Lit::Str(quote_str!(&*jsx_text.value)))),
+            }],
+            type_args: None,
+        })
+    }
 }
 
 impl VisitMut for VueJsxTransformVisitor {
@@ -100,31 +239,10 @@ impl VisitMut for VueJsxTransformVisitor {
     }
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
-        if let Expr::JSXElement(jsx) = expr {
-            *expr = Expr::Call(CallExpr {
-                span: DUMMY_SP,
-                callee: Callee::Expr(Box::new(Expr::Ident(
-                    self.imports
-                        .entry("createVNode")
-                        .or_insert_with_key(|name| private_ident!(*name))
-                        .clone(),
-                ))),
-                args: vec![
-                    ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(self.transform_tag(&jsx.opening.name)),
-                    },
-                    ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(if jsx.opening.attrs.is_empty() {
-                            Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
-                        } else {
-                            Expr::Object(self.transform_attrs(&jsx.opening.attrs))
-                        }),
-                    },
-                ],
-                type_args: None,
-            });
+        match expr {
+            Expr::JSXElement(jsx_element) => *expr = self.transform_jsx_element(jsx_element),
+            Expr::JSXFragment(jsx_fragment) => *expr = self.transform_jsx_fragment(jsx_fragment),
+            _ => {}
         }
 
         expr.visit_mut_children_with(self);
