@@ -78,7 +78,11 @@ impl VueJsxTransformVisitor {
     fn transform_tag(&mut self, jsx_element_name: &JSXElementName) -> Expr {
         match jsx_element_name {
             JSXElementName::Ident(ident) => {
-                if ident.to_id().1.has_mark(self.unresolved_mark) {
+                if css_dataset::tags::STANDARD_HTML_TAGS.contains(&*ident.sym)
+                    || css_dataset::tags::SVG_TAGS.contains(&*ident.sym)
+                {
+                    Expr::Lit(Lit::Str(quote_str!(&*ident.sym)))
+                } else if ident.to_id().1.has_mark(self.unresolved_mark) {
                     // for components that can't be resolved from current file
                     Expr::Call(CallExpr {
                         span: DUMMY_SP,
