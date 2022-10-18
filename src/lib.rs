@@ -15,15 +15,17 @@ pub struct VueJsxTransformVisitor {
 }
 
 impl VueJsxTransformVisitor {
+    fn import_from_vue(&mut self, item: &'static str) -> Ident {
+        self.imports
+            .entry(item)
+            .or_insert_with_key(|name| private_ident!(*name))
+            .clone()
+    }
+
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(
-                self.imports
-                    .entry("createVNode")
-                    .or_insert_with_key(|name| private_ident!(*name))
-                    .clone(),
-            ))),
+            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue("createVNode")))),
             args: vec![
                 ExprOrSpread {
                     spread: None,
@@ -49,21 +51,11 @@ impl VueJsxTransformVisitor {
     fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(
-                self.imports
-                    .entry("createVNode")
-                    .or_insert_with_key(|name| private_ident!(*name))
-                    .clone(),
-            ))),
+            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue("createVNode")))),
             args: vec![
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(Expr::Ident(
-                        self.imports
-                            .entry("Fragment")
-                            .or_insert_with_key(|name| private_ident!(*name))
-                            .clone(),
-                    )),
+                    expr: Box::new(Expr::Ident(self.import_from_vue("Fragment"))),
                 },
                 ExprOrSpread {
                     spread: None,
@@ -197,10 +189,7 @@ impl VueJsxTransformVisitor {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(
-                self.imports
-                    .entry("createTextVNode")
-                    .or_insert_with_key(|name| private_ident!(*name))
-                    .clone(),
+                self.import_from_vue("createTextVNode"),
             ))),
             args: vec![ExprOrSpread {
                 spread: None,
