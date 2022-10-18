@@ -14,6 +14,12 @@ pub struct VueJsxTransformVisitor {
     imports: HashMap<&'static str, Ident>,
 }
 
+impl VueJsxTransformVisitor {
+    fn transform_props(&mut self) -> ObjectLit {
+        todo!()
+    }
+}
+
 impl VisitMut for VueJsxTransformVisitor {
     fn visit_mut_module(&mut self, module: &mut Module) {
         module.visit_mut_children_with(self);
@@ -51,20 +57,30 @@ impl VisitMut for VueJsxTransformVisitor {
                         .or_insert_with_key(|name| private_ident!(*name))
                         .clone(),
                 ))),
-                args: vec![match &jsx.opening.name {
-                    JSXElementName::Ident(ident) => ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(Expr::Ident(ident.clone())),
+                args: vec![
+                    match &jsx.opening.name {
+                        JSXElementName::Ident(ident) => ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::Ident(ident.clone())),
+                        },
+                        JSXElementName::JSXMemberExpr(expr) => ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::JSXMember(expr.clone())),
+                        },
+                        JSXElementName::JSXNamespacedName(name) => ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::JSXNamespacedName(name.clone())),
+                        },
                     },
-                    JSXElementName::JSXMemberExpr(expr) => ExprOrSpread {
+                    ExprOrSpread {
                         spread: None,
-                        expr: Box::new(Expr::JSXMember(expr.clone())),
+                        expr: Box::new(if jsx.opening.attrs.is_empty() {
+                            Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+                        } else {
+                            Expr::Object(self.transform_props())
+                        }),
                     },
-                    JSXElementName::JSXNamespacedName(name) => ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(Expr::JSXNamespacedName(name.clone())),
-                    },
-                }],
+                ],
                 type_args: None,
             });
         }
