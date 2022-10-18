@@ -1,0 +1,21 @@
+[package]
+name = "swc-plugin-vue-jsx"
+description = "SWC plugin for transforming Vue JSX."
+version = "0.0.0"
+authors = ["Pig Fang <g-plane@hotmail.com>"]
+license = "MIT"
+repository = "https://github.com/g-plane/swc-plugin-vue-jsx"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+lto = true
+
+[dependencies]
+serde = "1.0"
+swc_core = { version = "0.39", features = ["ecma_utils", "plugin_transform"] }
+
+[dev-dependencies]
+swc_ecma_parser = "0.122"
