@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use swc_core::{
-    common::DUMMY_SP,
+    common::{Mark, DUMMY_SP},
     ecma::{
         ast::*,
         transforms::testing::test,
@@ -16,6 +16,7 @@ const FRAGMENT: &str = "Fragment";
 
 pub struct VueJsxTransformVisitor {
     imports: HashMap<&'static str, Ident>,
+    unresolved_mark: Mark,
 }
 
 impl VueJsxTransformVisitor {
@@ -76,7 +77,24 @@ impl VueJsxTransformVisitor {
 
     fn transform_tag(&mut self, jsx_element_name: &JSXElementName) -> Expr {
         match jsx_element_name {
-            JSXElementName::Ident(ident) => Expr::Ident(ident.clone()),
+            JSXElementName::Ident(ident) => {
+                if ident.to_id().1.has_mark(self.unresolved_mark) {
+                    // for components that can't be resolved from current file
+                    Expr::Call(CallExpr {
+                        span: DUMMY_SP,
+                        callee: Callee::Expr(Box::new(Expr::Ident(
+                            self.import_from_vue("resolveComponent"),
+                        ))),
+                        args: vec![ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::Lit(Lit::Str(quote_str!(&*ident.sym)))),
+                        }],
+                        type_args: None,
+                    })
+                } else {
+                    Expr::Ident(ident.clone())
+                }
+            }
             JSXElementName::JSXMemberExpr(expr) => Expr::JSXMember(expr.clone()),
             JSXElementName::JSXNamespacedName(name) => Expr::JSXNamespacedName(name.clone()),
         }
@@ -246,9 +264,10 @@ impl VisitMut for VueJsxTransformVisitor {
 }
 
 #[plugin_transform]
-pub fn vue_jsx(program: Program, _metadata: TransformPluginProgramMetadata) -> Program {
+pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
     program.fold_with(&mut as_folder(VueJsxTransformVisitor {
         imports: Default::default(),
+        unresolved_mark: metadata.unresolved_mark,
     }))
 }
 
@@ -258,14 +277,13 @@ test!(
         ..Default::default()
     }),
     |_| {
-        use swc_core::{
-            common::{chain, Mark},
-            ecma::transforms::base::resolver,
-        };
+        use swc_core::{common::chain, ecma::transforms::base::resolver};
+        let unresolved_mark = Mark::new();
         chain!(
-            resolver(Mark::new(), Mark::new(), false),
+            resolver(unresolved_mark, Mark::new(), false),
             as_folder(VueJsxTransformVisitor {
                 imports: Default::default(),
+                unresolved_mark,
             })
         )
     },
