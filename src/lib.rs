@@ -10,6 +10,10 @@ use swc_core::{
     plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 
+const CREATE_VNODE: &str = "createVNode";
+const CREATE_TEXT_VNODE: &str = "createTextVNode";
+const FRAGMENT: &str = "Fragment";
+
 pub struct VueJsxTransformVisitor {
     imports: HashMap<&'static str, Ident>,
 }
@@ -25,7 +29,7 @@ impl VueJsxTransformVisitor {
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue("createVNode")))),
+            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
             args: vec![
                 ExprOrSpread {
                     spread: None,
@@ -51,11 +55,11 @@ impl VueJsxTransformVisitor {
     fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue("createVNode")))),
+            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
             args: vec![
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(Expr::Ident(self.import_from_vue("Fragment"))),
+                    expr: Box::new(Expr::Ident(self.import_from_vue(FRAGMENT))),
                 },
                 ExprOrSpread {
                     spread: None,
@@ -192,7 +196,7 @@ impl VueJsxTransformVisitor {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(
-                self.import_from_vue("createTextVNode"),
+                self.import_from_vue(CREATE_TEXT_VNODE),
             ))),
             args: vec![ExprOrSpread {
                 spread: None,
