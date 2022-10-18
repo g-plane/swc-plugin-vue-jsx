@@ -257,9 +257,18 @@ test!(
         jsx: true,
         ..Default::default()
     }),
-    |_| as_folder(VueJsxTransformVisitor {
-        imports: Default::default(),
-    }),
+    |_| {
+        use swc_core::{
+            common::{chain, Mark},
+            ecma::transforms::base::resolver,
+        };
+        chain!(
+            resolver(Mark::new(), Mark::new(), false),
+            as_folder(VueJsxTransformVisitor {
+                imports: Default::default(),
+            })
+        )
+    },
     basic,
     r#"const App = <Comp v={afa}>{}{}</Comp>;"#,
     r#""#
