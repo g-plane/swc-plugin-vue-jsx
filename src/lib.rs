@@ -10,13 +10,17 @@ use swc_core::{
     plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 
+mod util;
+
 const CREATE_VNODE: &str = "createVNode";
 const CREATE_TEXT_VNODE: &str = "createTextVNode";
 const FRAGMENT: &str = "Fragment";
 
+#[derive(Default)]
 pub struct VueJsxTransformVisitor {
     imports: HashMap<&'static str, Ident>,
     unresolved_mark: Mark,
+    slot_helper_ident: Option<Ident>,
 }
 
 impl VueJsxTransformVisitor {
@@ -237,6 +241,16 @@ impl VisitMut for VueJsxTransformVisitor {
     fn visit_mut_module(&mut self, module: &mut Module) {
         module.visit_mut_children_with(self);
 
+        if let Some(slot_helper) = &self.slot_helper_ident {
+            module.body.insert(
+                0,
+                ModuleItem::Stmt(Stmt::Decl(Decl::Fn(util::build_slot_helper(
+                    slot_helper.clone(),
+                    self.import_from_vue("isVNode"),
+                )))),
+            )
+        }
+
         module.body.insert(
             0,
             ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
@@ -274,8 +288,8 @@ impl VisitMut for VueJsxTransformVisitor {
 #[plugin_transform]
 pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
     program.fold_with(&mut as_folder(VueJsxTransformVisitor {
-        imports: Default::default(),
         unresolved_mark: metadata.unresolved_mark,
+        ..Default::default()
     }))
 }
 
@@ -290,8 +304,8 @@ test!(
         chain!(
             resolver(unresolved_mark, Mark::new(), false),
             as_folder(VueJsxTransformVisitor {
-                imports: Default::default(),
                 unresolved_mark,
+                ..Default::default()
             })
         )
     },
