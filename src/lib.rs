@@ -1,3 +1,4 @@
+use options::Options;
 use std::collections::HashMap;
 use swc_core::{
     common::{Mark, DUMMY_SP},
@@ -10,6 +11,7 @@ use swc_core::{
     plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 
+mod options;
 mod util;
 
 const CREATE_VNODE: &str = "createVNode";
@@ -18,6 +20,7 @@ const FRAGMENT: &str = "Fragment";
 
 #[derive(Default)]
 pub struct VueJsxTransformVisitor {
+    options: Options,
     imports: HashMap<&'static str, Ident>,
     unresolved_mark: Mark,
     slot_helper_ident: Option<Ident>,
@@ -287,8 +290,15 @@ impl VisitMut for VueJsxTransformVisitor {
 
 #[plugin_transform]
 pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
+    let options = metadata
+        .get_transform_plugin_config()
+        .map(|json| {
+            serde_json::from_str(&json).expect("failed to parse config of plugin 'vue-jsx'")
+        })
+        .unwrap_or_default();
     program.fold_with(&mut as_folder(VueJsxTransformVisitor {
         unresolved_mark: metadata.unresolved_mark,
+        options,
         ..Default::default()
     }))
 }

@@ -1287,6 +1287,7 @@ version = "0.0.0"
 dependencies = [
  "css_dataset",
  "serde",
+ "serde_json",
  "swc_core",
  "swc_ecma_parser",
 ]
