@@ -45,11 +45,7 @@ impl VueJsxTransformVisitor {
                 },
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(if jsx_element.opening.attrs.is_empty() {
-                        Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
-                    } else {
-                        Expr::Object(self.transform_attrs(&jsx_element.opening.attrs))
-                    }),
+                    expr: Box::new(self.transform_attrs(&jsx_element.opening.attrs)),
                 },
                 ExprOrSpread {
                     spread: None,
@@ -115,8 +111,21 @@ impl VueJsxTransformVisitor {
         }
     }
 
-    fn transform_attrs(&mut self, attrs: &[JSXAttrOrSpread]) -> ObjectLit {
-        ObjectLit {
+    fn transform_attrs(&mut self, attrs: &[JSXAttrOrSpread]) -> Expr {
+        if attrs.is_empty() {
+            return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
+        }
+
+        match attrs.first() {
+            Some(JSXAttrOrSpread::SpreadElement(SpreadElement { expr, .. }))
+                if attrs.len() == 1 =>
+            {
+                return *expr.clone();
+            }
+            _ => {}
+        }
+
+        Expr::Object(ObjectLit {
             span: DUMMY_SP,
             props: attrs
                 .iter()
@@ -159,8 +168,8 @@ impl VueJsxTransformVisitor {
                     }
                     JSXAttrOrSpread::SpreadElement(spread) => PropOrSpread::Spread(spread.clone()),
                 })
-                .collect(),
-        }
+                .collect::<Vec<_>>(),
+        })
     }
 
     fn transform_children(&mut self, children: &[JSXElementChild]) -> Expr {
