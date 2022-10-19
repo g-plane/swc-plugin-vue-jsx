@@ -79,8 +79,9 @@ impl VueJsxTransformVisitor {
         match jsx_element_name {
             JSXElementName::Ident(ident) => {
                 let name = &*ident.sym;
-                if css_dataset::tags::STANDARD_HTML_TAGS.contains(name)
-                    || css_dataset::tags::SVG_TAGS.contains(name)
+                if name.as_bytes()[0].is_ascii_lowercase()
+                    && (css_dataset::tags::STANDARD_HTML_TAGS.contains(name)
+                        || css_dataset::tags::SVG_TAGS.contains(name))
                 {
                     Expr::Lit(Lit::Str(quote_str!(name)))
                 } else if name == FRAGMENT {
