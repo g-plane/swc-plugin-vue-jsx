@@ -125,13 +125,12 @@ impl VueJsxTransformVisitor {
             _ => {}
         }
 
-        Expr::Object(ObjectLit {
-            span: DUMMY_SP,
-            props: attrs
-                .iter()
-                .map(|jsx_attr_or_spread| match jsx_attr_or_spread {
+        let props = attrs.iter().fold(
+            Vec::with_capacity(attrs.len()),
+            |mut props, jsx_attr_or_spread| {
+                match jsx_attr_or_spread {
                     JSXAttrOrSpread::JSXAttr(jsx_attr) => {
-                        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                             key: match &jsx_attr.name {
                                 JSXAttrName::Ident(ident) => PropName::Str(quote_str!(&ident.sym)),
                                 JSXAttrName::JSXNamespacedName(name) => PropName::Str(quote_str!(
@@ -164,12 +163,81 @@ impl VueJsxTransformVisitor {
                                         value: true,
                                     })))
                                 }),
-                        })))
+                        }))));
                     }
-                    JSXAttrOrSpread::SpreadElement(spread) => PropOrSpread::Spread(spread.clone()),
-                })
-                .collect::<Vec<_>>(),
-        })
+                    JSXAttrOrSpread::SpreadElement(spread) => {
+                        if let (Some(object), false) =
+                            (spread.expr.as_object(), self.options.merge_props)
+                        {
+                            props.extend_from_slice(&object.props);
+                        } else {
+                            props.push(PropOrSpread::Spread(spread.clone()));
+                        }
+                    }
+                }
+                props
+            },
+        );
+
+        if self.options.merge_props {
+            let capacity = props.len();
+            let (args, ..) = props.into_iter().fold(
+                (Vec::<ExprOrSpread>::with_capacity(capacity), false),
+                // The `last_is_spread` flag is used to track whether previous element is "spread element" or not.
+                // It's used for handling the case:
+                // ```
+                // <Component {...{ a: "b" }} c="d" />
+                // ```
+                // For the example above, the object inside spread element will be picked,
+                // so they become two entries:
+                // [[a, "b"], [c, "d"]]
+                // Without this special logic, those two entries will be merged into one object:
+                // `{ a: "b", c: "d" }`
+                // which doesn't match the behavior of official Babel plugin,
+                // so we need a flag to distinguish them.
+                // When handling the attribute `c="d"`, it knows previous element is a spread element,
+                // and it will create a new object, instead of reusing previous object which is from that spread element.
+                |(mut args, last_is_spread), prop_or_spread| match prop_or_spread {
+                    PropOrSpread::Prop(prop) => {
+                        // merge current prop to the existing object literal
+                        // only when previous element is not a "spread element"
+                        if let (Some(object), false) = (
+                            args.last_mut().and_then(|arg| arg.expr.as_mut_object()),
+                            last_is_spread,
+                        ) {
+                            object.props.push(PropOrSpread::Prop(prop));
+                        } else {
+                            args.push(ExprOrSpread {
+                                spread: None,
+                                expr: Box::new(Expr::Object(ObjectLit {
+                                    span: DUMMY_SP,
+                                    props: vec![PropOrSpread::Prop(prop)],
+                                })),
+                            });
+                        }
+                        (args, false)
+                    }
+                    PropOrSpread::Spread(SpreadElement { expr, .. }) => {
+                        args.push(ExprOrSpread { spread: None, expr });
+                        (args, true)
+                    }
+                },
+            );
+            match args.first() {
+                Some(ExprOrSpread { spread: None, expr }) if args.len() == 1 => *expr.clone(),
+                _ => Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue("mergeProps")))),
+                    args,
+                    type_args: None,
+                }),
+            }
+        } else {
+            Expr::Object(ObjectLit {
+                span: DUMMY_SP,
+                props,
+            })
+        }
     }
 
     fn transform_children(&mut self, children: &[JSXElementChild]) -> Expr {
@@ -324,11 +392,14 @@ test!(
             resolver(unresolved_mark, Mark::new(), false),
             as_folder(VueJsxTransformVisitor {
                 unresolved_mark,
+                options: Options {
+                    ..Default::default()
+                },
                 ..Default::default()
             })
         )
     },
     basic,
-    r#"const App = <Comp v={afa}>{}{}</Comp>;"#,
+    r#"const App = <Comp {...{a:b}} c='d'>{}{}</Comp>;"#,
     r#""#
 );
