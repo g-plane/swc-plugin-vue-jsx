@@ -166,8 +166,8 @@ impl VueJsxTransformVisitor {
                         }))));
                     }
                     JSXAttrOrSpread::SpreadElement(spread) => {
-                        if let (Some(object), false) =
-                            (spread.expr.as_object(), self.options.merge_props)
+                        if let (Expr::Object(object), false) =
+                            (&*spread.expr, self.options.merge_props)
                         {
                             props.extend_from_slice(&object.props);
                         } else {
@@ -201,10 +201,9 @@ impl VueJsxTransformVisitor {
                     PropOrSpread::Prop(prop) => {
                         // merge current prop to the existing object literal
                         // only when previous element is not a "spread element"
-                        if let (Some(object), false) = (
-                            args.last_mut().and_then(|arg| arg.expr.as_mut_object()),
-                            last_is_spread,
-                        ) {
+                        if let (Some(Expr::Object(object)), false) =
+                            (args.last_mut().map(|arg| &mut *arg.expr), last_is_spread)
+                        {
                             object.props.push(PropOrSpread::Prop(prop));
                         } else {
                             args.push(ExprOrSpread {
