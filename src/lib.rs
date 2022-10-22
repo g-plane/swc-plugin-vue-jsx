@@ -123,15 +123,6 @@ impl VueJsxTransformVisitor {
             return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
         }
 
-        match attrs.first() {
-            Some(JSXAttrOrSpread::SpreadElement(SpreadElement { expr, .. }))
-                if attrs.len() == 1 =>
-            {
-                return *expr.clone();
-            }
-            _ => {}
-        }
-
         let props = attrs.iter().fold(
             Vec::with_capacity(attrs.len()),
             |mut props, jsx_attr_or_spread| {
