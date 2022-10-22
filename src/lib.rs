@@ -89,6 +89,13 @@ impl VueJsxTransformVisitor {
                     Expr::Lit(Lit::Str(quote_str!(name)))
                 } else if name == FRAGMENT {
                     Expr::Ident(self.import_from_vue(FRAGMENT))
+                } else if self
+                    .options
+                    .custom_element_patterns
+                    .iter()
+                    .any(|pattern| pattern.is_match(name))
+                {
+                    Expr::Lit(Lit::Str(quote_str!(name)))
                 } else if ident.to_id().1.has_mark(self.unresolved_mark) {
                     // for components that can't be resolved from current file
                     Expr::Call(CallExpr {

@@ -1286,6 +1286,7 @@ name = "swc-plugin-vue-jsx"
 version = "0.0.0"
 dependencies = [
  "css_dataset",
+ "regex",
  "serde",
  "serde_json",
  "swc_core",

@@ -1,4 +1,8 @@
-use serde::Deserialize;
+use serde::{
+    de::{Error, Unexpected, Visitor},
+    Deserialize, Deserializer,
+};
+use std::{fmt, ops::Deref};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -8,7 +12,7 @@ pub struct Options {
 
     pub optimize: bool,
 
-    pub custom_element_patterns: Vec<String>,
+    pub custom_element_patterns: Vec<Regex>,
 
     #[serde(default = "default_true")]
     pub merge_props: bool,
@@ -34,4 +38,58 @@ impl Default for Options {
 
 fn default_true() -> bool {
     true
+}
+
+pub struct Regex(regex::Regex);
+
+impl From<regex::Regex> for Regex {
+    fn from(value: regex::Regex) -> Self {
+        Self(value)
+    }
+}
+
+impl Deref for Regex {
+    type Target = regex::Regex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for Regex {
+    fn deserialize<D>(deserializer: D) -> Result<Regex, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_string(RegexVisitor)
+    }
+}
+
+/// Serde visitor for parsing string as the [`Regex`] type.
+struct RegexVisitor;
+
+impl<'de> Visitor<'de> for RegexVisitor {
+    type Value = Regex;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a string that represents a regex")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        regex::Regex::new(v)
+            .map(Regex)
+            .map_err(|_| E::invalid_value(Unexpected::Str(v), &"a valid regex"))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        regex::Regex::new(&v)
+            .map(Regex)
+            .map_err(|_| E::invalid_value(Unexpected::Str(&v), &"a valid regex"))
+    }
 }
