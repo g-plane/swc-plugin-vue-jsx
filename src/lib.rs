@@ -302,6 +302,31 @@ impl VueJsxTransformVisitor {
     }
 
     fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Expr {
+        let jsx_text_value = jsx_text.value.replace('\t', " ");
+        let mut jsx_text_lines = jsx_text_value.lines().enumerate().peekable();
+
+        let mut lines = vec![];
+        while let Some((index, line)) = jsx_text_lines.next() {
+            let line = if index == 0 {
+                // first line
+                line.trim_end()
+            } else if jsx_text_lines.peek().is_none() {
+                // last line
+                line.trim_start()
+            } else {
+                line.trim()
+            };
+            if !line.is_empty() {
+                lines.push(line);
+            }
+        }
+        let text = lines.join(" ");
+        let lit = if text.is_empty() {
+            Lit::Null(Null { span: DUMMY_SP })
+        } else {
+            Lit::Str(quote_str!(text))
+        };
+
         Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(
@@ -309,7 +334,7 @@ impl VueJsxTransformVisitor {
             ))),
             args: vec![ExprOrSpread {
                 spread: None,
-                expr: Box::new(Expr::Lit(Lit::Str(quote_str!(&*jsx_text.value)))),
+                expr: Box::new(Expr::Lit(lit)),
             }],
             type_args: None,
         })
