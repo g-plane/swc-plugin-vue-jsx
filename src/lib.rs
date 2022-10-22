@@ -1,7 +1,7 @@
 use options::Options;
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 use swc_core::{
-    common::{Mark, DUMMY_SP},
+    common::{Mark, Spanned, DUMMY_SP},
     ecma::{
         ast::*,
         transforms::testing::test,
@@ -17,13 +17,17 @@ mod util;
 const CREATE_VNODE: &str = "createVNode";
 const CREATE_TEXT_VNODE: &str = "createTextVNode";
 const FRAGMENT: &str = "Fragment";
+const KEEP_ALIVE: &str = "KeepAlive";
 
 #[derive(Default)]
 pub struct VueJsxTransformVisitor {
     options: Options,
     imports: HashMap<&'static str, Ident>,
     unresolved_mark: Mark,
+
     slot_helper_ident: Option<Ident>,
+    injecting_vars: Vec<VarDeclarator>,
+    slot_counter: usize,
 }
 
 impl VueJsxTransformVisitor {
@@ -34,7 +38,14 @@ impl VueJsxTransformVisitor {
             .clone()
     }
 
+    fn generate_slot_helper(&mut self) -> Ident {
+        self.slot_helper_ident
+            .get_or_insert_with(|| private_ident!("_isSlot"))
+            .clone()
+    }
+
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
+        let is_component = self.is_component(&jsx_element.opening.name);
         Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
@@ -49,7 +60,7 @@ impl VueJsxTransformVisitor {
                 },
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(self.transform_children(&jsx_element.children)),
+                    expr: Box::new(self.transform_children(&jsx_element.children, is_component)),
                 },
             ],
             type_args: None,
@@ -71,7 +82,7 @@ impl VueJsxTransformVisitor {
                 },
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(self.transform_children(&jsx_fragment.children)),
+                    expr: Box::new(self.transform_children(&jsx_fragment.children, false)),
                 },
             ],
             type_args: None,
@@ -237,7 +248,7 @@ impl VueJsxTransformVisitor {
         }
     }
 
-    fn transform_children(&mut self, children: &[JSXElementChild]) -> Expr {
+    fn transform_children(&mut self, children: &[JSXElementChild], is_component: bool) -> Expr {
         let elems = children
             .iter()
             .map(|child| match child {
@@ -275,28 +286,136 @@ impl VueJsxTransformVisitor {
             .map(Some)
             .collect::<Vec<_>>();
 
-        if elems.is_empty() {
-            Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
-        } else {
-            Expr::Object(ObjectLit {
-                span: DUMMY_SP,
-                props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                    key: PropName::Ident(quote_ident!("default")),
-                    value: Box::new(Expr::Arrow(ArrowExpr {
-                        span: DUMMY_SP,
-                        params: vec![],
-                        body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+        match elems.as_slice() {
+            [] => Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
+            [Some(ExprOrSpread { spread: None, expr })] => match &**expr {
+                expr @ Expr::Ident(..) if is_component => {
+                    if self.options.enable_object_slots {
+                        Expr::Cond(CondExpr {
+                            span: DUMMY_SP,
+                            test: Box::new(Expr::Call(CallExpr {
+                                span: DUMMY_SP,
+                                callee: Callee::Expr(Box::new(Expr::Ident(
+                                    self.generate_slot_helper(),
+                                ))),
+                                args: vec![ExprOrSpread {
+                                    spread: None,
+                                    expr: Box::new(expr.clone()),
+                                }],
+                                type_args: None,
+                            })),
+                            cons: Box::new(expr.clone()),
+                            alt: Box::new(self.wrap_children(elems)),
+                        })
+                    } else {
+                        self.wrap_children(elems)
+                    }
+                }
+                expr @ Expr::Call(..) if expr.span() != DUMMY_SP && is_component => {
+                    // the element was generated and doesn't have location information
+                    if self.options.enable_object_slots {
+                        let slot_ident = self.generate_unique_slot_ident();
+                        Expr::Cond(CondExpr {
+                            span: DUMMY_SP,
+                            test: Box::new(Expr::Call(CallExpr {
+                                span: DUMMY_SP,
+                                callee: Callee::Expr(Box::new(Expr::Ident(
+                                    self.generate_slot_helper(),
+                                ))),
+                                args: vec![ExprOrSpread {
+                                    spread: None,
+                                    expr: Box::new(Expr::Assign(AssignExpr {
+                                        span: DUMMY_SP,
+                                        op: op!("="),
+                                        left: PatOrExpr::Expr(Box::new(Expr::Ident(
+                                            slot_ident.clone(),
+                                        ))),
+                                        right: Box::new(expr.clone()),
+                                    })),
+                                }],
+                                type_args: None,
+                            })),
+                            cons: Box::new(Expr::Ident(slot_ident.clone())),
+                            alt: Box::new(self.wrap_children(vec![Some(ExprOrSpread {
+                                spread: None,
+                                expr: Box::new(Expr::Ident(slot_ident)),
+                            })])),
+                        })
+                    } else {
+                        self.wrap_children(elems)
+                    }
+                }
+                expr @ Expr::Fn(..) | expr @ Expr::Arrow(..) => Expr::Object(ObjectLit {
+                    span: DUMMY_SP,
+                    props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        key: PropName::Ident(quote_ident!("default")),
+                        value: Box::new(expr.clone()),
+                    })))],
+                }),
+                expr @ Expr::Object(..) => expr.clone(), // TODO: `optimize` option
+                _ => {
+                    if is_component {
+                        self.wrap_children(elems)
+                    } else {
+                        Expr::Array(ArrayLit {
                             span: DUMMY_SP,
                             elems,
-                        }))),
-                        is_async: false,
-                        is_generator: false,
-                        type_params: None,
-                        return_type: None,
-                    })),
-                })))],
-            })
+                        })
+                    }
+                }
+            },
+            _ => {
+                if is_component {
+                    self.wrap_children(elems)
+                } else {
+                    Expr::Array(ArrayLit {
+                        span: DUMMY_SP,
+                        elems,
+                    })
+                }
+            }
         }
+    }
+
+    fn wrap_children(&self, elems: Vec<Option<ExprOrSpread>>) -> Expr {
+        Expr::Object(ObjectLit {
+            span: DUMMY_SP,
+            props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: PropName::Ident(quote_ident!("default")),
+                value: Box::new(Expr::Arrow(ArrowExpr {
+                    span: DUMMY_SP,
+                    params: vec![],
+                    body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+                        span: DUMMY_SP,
+                        elems,
+                    }))),
+                    is_async: false,
+                    is_generator: false,
+                    type_params: None,
+                    return_type: None,
+                })),
+            })))],
+        })
+    }
+
+    fn generate_unique_slot_ident(&mut self) -> Ident {
+        let ident = if self.slot_counter == 1 {
+            private_ident!("_slot")
+        } else {
+            private_ident!(format!("_slot{}", self.slot_counter))
+        };
+        self.injecting_vars.push(VarDeclarator {
+            span: DUMMY_SP,
+            name: Pat::Ident(BindingIdent {
+                id: ident.clone(),
+                type_ann: None,
+            }),
+            init: None,
+            definite: false,
+        });
+
+        self.slot_counter += 1;
+        ident
     }
 
     fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Expr {
@@ -337,11 +456,51 @@ impl VueJsxTransformVisitor {
             type_args: None,
         })
     }
+
+    fn is_component(&self, element_name: &JSXElementName) -> bool {
+        let name = match element_name {
+            JSXElementName::Ident(Ident { sym, .. }) => &*sym,
+            JSXElementName::JSXMemberExpr(JSXMemberExpr { prop, .. }) => &*prop.sym,
+            JSXElementName::JSXNamespacedName(JSXNamespacedName { name, .. }) => &*name.sym,
+        };
+        let should_transformed_to_slots = !self
+            .imports
+            .get(FRAGMENT)
+            .map(|ident| &*ident.sym == name)
+            .unwrap_or_default()
+            && name != KEEP_ALIVE;
+
+        if matches!(element_name, JSXElementName::JSXMemberExpr(..)) {
+            should_transformed_to_slots
+        } else {
+            self.options
+                .custom_element_patterns
+                .iter()
+                .all(|pattern| !pattern.is_match(name))
+                && should_transformed_to_slots
+                && !(name.as_bytes()[0].is_ascii_lowercase()
+                    && (css_dataset::tags::STANDARD_HTML_TAGS.contains(name)
+                        || css_dataset::tags::SVG_TAGS.contains(name)))
+        }
+    }
 }
 
 impl VisitMut for VueJsxTransformVisitor {
     fn visit_mut_module(&mut self, module: &mut Module) {
         module.visit_mut_children_with(self);
+
+        if !self.injecting_vars.is_empty() {
+            module.body.insert(
+                0,
+                ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                    span: DUMMY_SP,
+                    kind: VarDeclKind::Let,
+                    declare: false,
+                    decls: mem::take(&mut self.injecting_vars),
+                })))),
+            );
+            self.slot_counter = 1;
+        }
 
         if let Some(slot_helper) = &self.slot_helper_ident {
             module.body.insert(
@@ -376,6 +535,23 @@ impl VisitMut for VueJsxTransformVisitor {
         )
     }
 
+    fn visit_mut_stmts(&mut self, stmts: &mut Vec<Stmt>) {
+        stmts.visit_mut_children_with(self);
+
+        if !self.injecting_vars.is_empty() {
+            stmts.insert(
+                0,
+                Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                    span: DUMMY_SP,
+                    kind: VarDeclKind::Let,
+                    declare: false,
+                    decls: mem::take(&mut self.injecting_vars),
+                }))),
+            );
+            self.slot_counter = 1;
+        }
+    }
+
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
         match expr {
             Expr::JSXElement(jsx_element) => *expr = self.transform_jsx_element(jsx_element),
@@ -397,6 +573,7 @@ pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
         .unwrap_or_default();
     program.fold_with(&mut as_folder(VueJsxTransformVisitor {
         unresolved_mark: metadata.unresolved_mark,
+        slot_counter: 1,
         options,
         ..Default::default()
     }))
@@ -414,6 +591,7 @@ test!(
             resolver(unresolved_mark, Mark::new(), false),
             as_folder(VueJsxTransformVisitor {
                 unresolved_mark,
+                slot_counter: 1,
                 options: Options {
                     ..Default::default()
                 },
