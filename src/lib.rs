@@ -22,7 +22,7 @@ const KEEP_ALIVE: &str = "KeepAlive";
 #[derive(Default)]
 pub struct VueJsxTransformVisitor {
     options: Options,
-    imports: HashMap<&'static str, Ident>,
+    imports: HashMap<&'static str, HashMap<&'static str, Ident>>,
     unresolved_mark: Mark,
 
     slot_helper_ident: Option<Ident>,
@@ -33,8 +33,10 @@ pub struct VueJsxTransformVisitor {
 impl VueJsxTransformVisitor {
     fn import_from_vue(&mut self, item: &'static str) -> Ident {
         self.imports
+            .entry("vue")
+            .or_default()
             .entry(item)
-            .or_insert_with_key(|name| private_ident!(*name))
+            .or_insert_with_key(|name| private_ident!(format!("_{name}")))
             .clone()
     }
 
@@ -465,7 +467,8 @@ impl VueJsxTransformVisitor {
         };
         let should_transformed_to_slots = !self
             .imports
-            .get(FRAGMENT)
+            .get("vue")
+            .and_then(|members| members.get(FRAGMENT))
             .map(|ident| &*ident.sym == name)
             .unwrap_or_default()
             && name != KEEP_ALIVE;
@@ -512,27 +515,28 @@ impl VisitMut for VueJsxTransformVisitor {
             )
         }
 
-        module.body.insert(
-            0,
-            ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
-                span: DUMMY_SP,
-                specifiers: self
-                    .imports
-                    .iter()
-                    .map(|(imported, local)| {
-                        ImportSpecifier::Named(ImportNamedSpecifier {
-                            span: DUMMY_SP,
-                            local: local.clone(),
-                            imported: Some(ModuleExportName::Ident(quote_ident!(*imported))),
-                            is_type_only: false,
+        if let Some(members) = self.imports.get("vue") {
+            module.body.insert(
+                0,
+                ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
+                    span: DUMMY_SP,
+                    specifiers: members
+                        .iter()
+                        .map(|(imported, local)| {
+                            ImportSpecifier::Named(ImportNamedSpecifier {
+                                span: DUMMY_SP,
+                                local: local.clone(),
+                                imported: Some(ModuleExportName::Ident(quote_ident!(*imported))),
+                                is_type_only: false,
+                            })
                         })
-                    })
-                    .collect(),
-                src: Box::new(quote_str!("vue")),
-                type_only: false,
-                asserts: None,
-            })),
-        )
+                        .collect(),
+                    src: Box::new(quote_str!("vue")),
+                    type_only: false,
+                    asserts: None,
+                })),
+            );
+        }
     }
 
     fn visit_mut_stmts(&mut self, stmts: &mut Vec<Stmt>) {
