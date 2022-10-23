@@ -22,7 +22,7 @@ const KEEP_ALIVE: &str = "KeepAlive";
 #[derive(Default)]
 pub struct VueJsxTransformVisitor {
     options: Options,
-    imports: HashMap<&'static str, HashMap<&'static str, Ident>>,
+    vue_imports: HashMap<&'static str, Ident>,
     unresolved_mark: Mark,
 
     slot_helper_ident: Option<Ident>,
@@ -32,9 +32,7 @@ pub struct VueJsxTransformVisitor {
 
 impl VueJsxTransformVisitor {
     fn import_from_vue(&mut self, item: &'static str) -> Ident {
-        self.imports
-            .entry("vue")
-            .or_default()
+        self.vue_imports
             .entry(item)
             .or_insert_with_key(|name| private_ident!(format!("_{name}")))
             .clone()
@@ -466,9 +464,8 @@ impl VueJsxTransformVisitor {
             JSXElementName::JSXNamespacedName(JSXNamespacedName { name, .. }) => &*name.sym,
         };
         let should_transformed_to_slots = !self
-            .imports
-            .get("vue")
-            .and_then(|members| members.get(FRAGMENT))
+            .vue_imports
+            .get(FRAGMENT)
             .map(|ident| &*ident.sym == name)
             .unwrap_or_default()
             && name != KEEP_ALIVE;
@@ -515,12 +512,13 @@ impl VisitMut for VueJsxTransformVisitor {
             )
         }
 
-        if let Some(members) = self.imports.get("vue") {
+        if !self.vue_imports.is_empty() {
             module.body.insert(
                 0,
                 ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
                     span: DUMMY_SP,
-                    specifiers: members
+                    specifiers: self
+                        .vue_imports
                         .iter()
                         .map(|(imported, local)| {
                             ImportSpecifier::Named(ImportNamedSpecifier {
