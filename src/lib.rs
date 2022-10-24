@@ -528,6 +528,22 @@ impl VisitMut for VueJsxTransformVisitor {
             )
         }
 
+        if let Some(helper) = &self.transform_on_helper {
+            module.body.insert(
+                0,
+                ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
+                    span: DUMMY_SP,
+                    specifiers: vec![ImportSpecifier::Default(ImportDefaultSpecifier {
+                        span: DUMMY_SP,
+                        local: helper.clone(),
+                    })],
+                    src: Box::new(quote_str!("@vue/babel-helper-vue-transform-on")),
+                    type_only: false,
+                    asserts: None,
+                })),
+            )
+        }
+
         if !self.vue_imports.is_empty() {
             module.body.insert(
                 0,
