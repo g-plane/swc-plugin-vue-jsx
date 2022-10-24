@@ -1,5 +1,5 @@
 use options::Options;
-use std::{collections::HashMap, mem};
+use std::{borrow::Cow, collections::HashMap, mem};
 use swc_core::{
     common::{Mark, Spanned, DUMMY_SP},
     ecma::{
@@ -23,6 +23,7 @@ const KEEP_ALIVE: &str = "KeepAlive";
 pub struct VueJsxTransformVisitor {
     options: Options,
     vue_imports: HashMap<&'static str, Ident>,
+    transform_on_helper: Option<Ident>,
     unresolved_mark: Mark,
 
     slot_helper_ident: Option<Ident>,
@@ -134,117 +135,132 @@ impl VueJsxTransformVisitor {
             return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
         }
 
-        let props = attrs.iter().fold(
-            Vec::with_capacity(attrs.len()),
-            |mut props, jsx_attr_or_spread| {
+        let (mut props, mut merge_args) = attrs.iter().fold(
+            (
+                Vec::with_capacity(attrs.len()),
+                Vec::with_capacity(attrs.len()),
+            ),
+            |(mut props, mut merge_args), jsx_attr_or_spread| {
                 match jsx_attr_or_spread {
                     JSXAttrOrSpread::JSXAttr(jsx_attr) => {
-                        props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                            key: match &jsx_attr.name {
-                                JSXAttrName::Ident(ident) => PropName::Str(quote_str!(&ident.sym)),
-                                JSXAttrName::JSXNamespacedName(name) => PropName::Str(quote_str!(
-                                    format!("{}:{}", name.ns.sym, name.name.sym)
-                                )),
-                            },
-                            value: jsx_attr
-                                .value
-                                .as_ref()
-                                .map(|value| match value {
-                                    JSXAttrValue::Lit(lit) => Box::new(Expr::Lit(lit.clone())),
-                                    JSXAttrValue::JSXExprContainer(JSXExprContainer {
-                                        expr: JSXExpr::Expr(expr),
-                                        ..
-                                    }) => expr.clone(),
-                                    JSXAttrValue::JSXExprContainer(JSXExprContainer {
-                                        expr: JSXExpr::JSXEmptyExpr(expr),
-                                        ..
-                                    }) => Box::new(Expr::JSXEmpty(expr.clone())),
-                                    JSXAttrValue::JSXElement(element) => {
-                                        Box::new(Expr::JSXElement(element.clone()))
-                                    }
-                                    JSXAttrValue::JSXFragment(fragment) => {
-                                        Box::new(Expr::JSXFragment(fragment.clone()))
-                                    }
-                                })
-                                .unwrap_or_else(|| {
-                                    Box::new(Expr::Lit(Lit::Bool(Bool {
-                                        span: DUMMY_SP,
-                                        value: true,
-                                    })))
-                                }),
-                        }))));
+                        let attr_name = match &jsx_attr.name {
+                            JSXAttrName::Ident(ident) => Cow::from(&*ident.sym),
+                            JSXAttrName::JSXNamespacedName(name) => {
+                                Cow::from(format!("{}:{}", name.ns.sym, name.name.sym))
+                            }
+                        };
+                        let attr_value = jsx_attr
+                            .value
+                            .as_ref()
+                            .map(|value| match value {
+                                JSXAttrValue::Lit(lit) => Box::new(Expr::Lit(lit.clone())),
+                                JSXAttrValue::JSXExprContainer(JSXExprContainer {
+                                    expr: JSXExpr::Expr(expr),
+                                    ..
+                                }) => expr.clone(),
+                                JSXAttrValue::JSXExprContainer(JSXExprContainer {
+                                    expr: JSXExpr::JSXEmptyExpr(expr),
+                                    ..
+                                }) => Box::new(Expr::JSXEmpty(expr.clone())),
+                                JSXAttrValue::JSXElement(element) => {
+                                    Box::new(Expr::JSXElement(element.clone()))
+                                }
+                                JSXAttrValue::JSXFragment(fragment) => {
+                                    Box::new(Expr::JSXFragment(fragment.clone()))
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                Box::new(Expr::Lit(Lit::Bool(Bool {
+                                    span: DUMMY_SP,
+                                    value: true,
+                                })))
+                            });
+
+                        if self.options.transform_on
+                            && (attr_name == "on" || attr_name == "nativeOn")
+                        {
+                            merge_args.push(Expr::Call(CallExpr {
+                                span: DUMMY_SP,
+                                callee: Callee::Expr(Box::new(Expr::Ident(
+                                    self.transform_on_helper
+                                        .get_or_insert_with(|| private_ident!("_transformOn"))
+                                        .clone(),
+                                ))),
+                                args: vec![ExprOrSpread {
+                                    spread: None,
+                                    expr: attr_value,
+                                }],
+                                type_args: None,
+                            }));
+                        } else {
+                            props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                KeyValueProp {
+                                    key: PropName::Str(quote_str!(attr_name)),
+                                    value: attr_value,
+                                },
+                            ))));
+                        }
                     }
                     JSXAttrOrSpread::SpreadElement(spread) => {
-                        if let (Expr::Object(object), false) =
-                            (&*spread.expr, self.options.merge_props)
-                        {
-                            props.extend_from_slice(&object.props);
+                        if !props.is_empty() && self.options.merge_props {
+                            merge_args.push(Expr::Object(ObjectLit {
+                                span: DUMMY_SP,
+                                props: mem::take(&mut props),
+                            }));
+                        }
+
+                        if let Expr::Object(object) = &*spread.expr {
+                            if self.options.merge_props {
+                                merge_args.push(Expr::Object(object.clone()));
+                            } else {
+                                props.extend_from_slice(&object.props);
+                            }
                         } else {
-                            props.push(PropOrSpread::Spread(spread.clone()));
+                            if self.options.merge_props {
+                                merge_args.push(*spread.expr.clone());
+                            } else {
+                                props.push(PropOrSpread::Spread(spread.clone()));
+                            }
                         }
                     }
                 }
-                props
+                (props, merge_args)
             },
         );
 
-        if self.options.merge_props {
-            let capacity = props.len();
-            let (args, ..) = props.into_iter().fold(
-                (Vec::<ExprOrSpread>::with_capacity(capacity), false),
-                // The `last_is_spread` flag is used to track whether previous element is "spread element" or not.
-                // It's used for handling the case:
-                // ```
-                // <Component {...{ a: "b" }} c="d" />
-                // ```
-                // For the example above, the object inside spread element will be picked,
-                // so they become two entries:
-                // [[a, "b"], [c, "d"]]
-                // Without this special logic, those two entries will be merged into one object:
-                // `{ a: "b", c: "d" }`
-                // which doesn't match the behavior of official Babel plugin,
-                // so we need a flag to distinguish them.
-                // When handling the attribute `c="d"`, it knows previous element is a spread element,
-                // and it will create a new object, instead of reusing previous object which is from that spread element.
-                |(mut args, last_is_spread), prop_or_spread| match prop_or_spread {
-                    PropOrSpread::Prop(prop) => {
-                        // merge current prop to the existing object literal
-                        // only when previous element is not a "spread element"
-                        if let (Some(Expr::Object(object)), false) =
-                            (args.last_mut().map(|arg| &mut *arg.expr), last_is_spread)
-                        {
-                            object.props.push(PropOrSpread::Prop(prop));
-                        } else {
-                            args.push(ExprOrSpread {
-                                spread: None,
-                                expr: Box::new(Expr::Object(ObjectLit {
-                                    span: DUMMY_SP,
-                                    props: vec![PropOrSpread::Prop(prop)],
-                                })),
-                            });
-                        }
-                        (args, false)
-                    }
-                    PropOrSpread::Spread(SpreadElement { expr, .. }) => {
-                        args.push(ExprOrSpread { spread: None, expr });
-                        (args, true)
-                    }
-                },
-            );
-            match args.first() {
-                Some(ExprOrSpread { spread: None, expr }) if args.len() == 1 => *expr.clone(),
+        if !merge_args.is_empty() {
+            if !props.is_empty() {
+                merge_args.push(Expr::Object(ObjectLit {
+                    span: DUMMY_SP,
+                    props: mem::take(&mut props),
+                }));
+            }
+            match merge_args.as_slice() {
+                [expr] => expr.clone(),
                 _ => Expr::Call(CallExpr {
                     span: DUMMY_SP,
                     callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue("mergeProps")))),
-                    args,
+                    args: merge_args
+                        .into_iter()
+                        .map(|expr| ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(expr),
+                        })
+                        .collect(),
                     type_args: None,
                 }),
             }
+        } else if !props.is_empty() {
+            if let [PropOrSpread::Spread(SpreadElement { expr, .. })] = props.as_slice() {
+                *expr.clone()
+            } else {
+                Expr::Object(ObjectLit {
+                    span: DUMMY_SP,
+                    props,
+                })
+            }
         } else {
-            Expr::Object(ObjectLit {
-                span: DUMMY_SP,
-                props,
-            })
+            Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
         }
     }
 
