@@ -222,13 +222,13 @@ impl VueJsxTransformVisitor {
                             Directive::Normal(directive) => directives.push(directive),
                             Directive::Html(expr) => props.push(PropOrSpread::Prop(Box::new(
                                 Prop::KeyValue(KeyValueProp {
-                                    key: PropName::Ident(quote_ident!("innerHTML")),
+                                    key: PropName::Str(quote_str!("innerHTML")),
                                     value: Box::new(expr),
                                 }),
                             ))),
                             Directive::Text(expr) => props.push(PropOrSpread::Prop(Box::new(
                                 Prop::KeyValue(KeyValueProp {
-                                    key: PropName::Ident(quote_ident!("textContent")),
+                                    key: PropName::Str(quote_str!("textContent")),
                                     value: Box::new(expr),
                                 }),
                             ))),
