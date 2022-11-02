@@ -117,23 +117,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
         } else {
             argument
         },
-        modifiers: modifiers.map(|modifiers| {
-            Expr::Object(ObjectLit {
-                span: DUMMY_SP,
-                props: modifiers
-                    .into_iter()
-                    .map(|modifier| {
-                        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                            key: PropName::Ident(quote_ident!(modifier)),
-                            value: Box::new(Expr::Lit(Lit::Bool(Bool {
-                                span: DUMMY_SP,
-                                value: true,
-                            }))),
-                        })))
-                    })
-                    .collect(),
-            })
-        }),
+        modifiers: modifiers.and_then(transform_modifiers),
         value,
     })
 }
@@ -298,27 +282,29 @@ fn parse_v_model_directive(
         } else {
             argument
         },
-        modifiers: modifiers.and_then(|modifiers| {
-            if modifiers.is_empty() {
-                None
-            } else {
-                Some(Expr::Object(ObjectLit {
-                    span: DUMMY_SP,
-                    props: modifiers
-                        .into_iter()
-                        .map(|modifier| {
-                            PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                                key: PropName::Str(quote_str!(modifier)),
-                                value: Box::new(Expr::Lit(Lit::Bool(Bool {
-                                    span: DUMMY_SP,
-                                    value: true,
-                                }))),
-                            })))
-                        })
-                        .collect(),
-                }))
-            }
-        }),
+        modifiers: modifiers.and_then(transform_modifiers),
         value,
     })
+}
+
+fn transform_modifiers(modifiers: HashSet<JsWord>) -> Option<Expr> {
+    if modifiers.is_empty() {
+        None
+    } else {
+        Some(Expr::Object(ObjectLit {
+            span: DUMMY_SP,
+            props: modifiers
+                .into_iter()
+                .map(|modifier| {
+                    PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        key: PropName::Str(quote_str!(modifier)),
+                        value: Box::new(Expr::Lit(Lit::Bool(Bool {
+                            span: DUMMY_SP,
+                            value: true,
+                        }))),
+                    })))
+                })
+                .collect(),
+        }))
+    }
 }
