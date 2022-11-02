@@ -299,10 +299,12 @@ impl VueJsxTransformVisitor {
                                     KeyValueProp {
                                         key: match directive.argument {
                                             Some(Expr::Lit(Lit::Null(..))) | None => {
-                                                PropName::Str(quote_str!("modelValue"))
+                                                PropName::Str(quote_str!("onUpdate:modelValue"))
                                             }
                                             Some(Expr::Lit(Lit::Str(Str { value, .. }))) => {
-                                                PropName::Str(quote_str!(value))
+                                                PropName::Str(quote_str!(format!(
+                                                    "onUpdate:{value}"
+                                                )))
                                             }
                                             Some(expr) => PropName::Computed(ComputedPropName {
                                                 span: DUMMY_SP,
