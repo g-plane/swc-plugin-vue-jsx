@@ -209,3 +209,25 @@ test!(
     }, null);
 "#
 );
+
+test!(
+    without_props,
+    "<a>a</a>",
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    _createVNode("a", null, [_createTextVNode("a")]);
+"#
+);
+
+test!(
+    merge_props_order,
+    r#"<button loading {...x} type="submit">btn</button>"#,
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode, mergeProps as _mergeProps } from "vue";
+    _createVNode("button", _mergeProps({
+        "loading": true
+    }, x, {
+        "type": "submit"
+    }), [_createTextVNode("btn")]);
+"#
+);
