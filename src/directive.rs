@@ -47,9 +47,9 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
     };
     let name = name.trim_start_matches('v').trim_start_matches('-');
     let mut splitted = name.split('_');
-    let name = splitted.next().unwrap_or(name);
+    let name = splitted.next().unwrap_or(name).to_ascii_lowercase();
 
-    match name {
+    match &*name {
         "html" => return parse_v_html_directive(jsx_attr),
         "text" => return parse_v_text_directive(jsx_attr),
         "model" => return parse_v_model_directive(jsx_attr, is_component, argument, splitted),
