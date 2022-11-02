@@ -1,9 +1,11 @@
+use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use options::Options;
 use std::{borrow::Cow, collections::HashMap, mem};
 use swc_core::{
     common::{Mark, Spanned, DUMMY_SP},
     ecma::{
         ast::*,
+        atoms::JsWord,
         transforms::testing::test,
         utils::{private_ident, quote_ident, quote_str},
         visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
@@ -11,6 +13,7 @@ use swc_core::{
     plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 
+mod directive;
 mod options;
 mod util;
 
@@ -47,7 +50,8 @@ impl VueJsxTransformVisitor {
 
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
         let is_component = self.is_component(&jsx_element.opening.name);
-        Expr::Call(CallExpr {
+        let mut directives = vec![];
+        let create_vnode_call = Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
             args: vec![
@@ -57,7 +61,11 @@ impl VueJsxTransformVisitor {
                 },
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(self.transform_attrs(&jsx_element.opening.attrs)),
+                    expr: Box::new(self.transform_attrs(
+                        &jsx_element.opening.attrs,
+                        is_component,
+                        &mut directives,
+                    )),
                 },
                 ExprOrSpread {
                     spread: None,
@@ -65,7 +73,69 @@ impl VueJsxTransformVisitor {
                 },
             ],
             type_args: None,
-        })
+        });
+
+        if directives.is_empty() {
+            create_vnode_call
+        } else {
+            Expr::Call(CallExpr {
+                span: DUMMY_SP,
+                callee: Callee::Expr(Box::new(Expr::Ident(
+                    self.import_from_vue("withDirectives"),
+                ))),
+                args: vec![
+                    ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(create_vnode_call),
+                    },
+                    ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(Expr::Array(ArrayLit {
+                            span: DUMMY_SP,
+                            elems: directives
+                                .into_iter()
+                                .map(|directive| {
+                                    let mut elems =
+                                        vec![
+                                            Some(ExprOrSpread {
+                                                spread: None,
+                                                expr: Box::new(self.resolve_directive(
+                                                    &directive.name,
+                                                    jsx_element,
+                                                )),
+                                            }),
+                                            Some(ExprOrSpread {
+                                                spread: None,
+                                                expr: Box::new(directive.value),
+                                            }),
+                                        ];
+                                    if let Some(argument) = directive.argument {
+                                        elems.push(Some(ExprOrSpread {
+                                            spread: None,
+                                            expr: Box::new(argument),
+                                        }));
+                                    }
+                                    if let Some(modifiers) = directive.modifiers {
+                                        elems.push(Some(ExprOrSpread {
+                                            spread: None,
+                                            expr: Box::new(modifiers),
+                                        }));
+                                    }
+                                    Some(ExprOrSpread {
+                                        spread: None,
+                                        expr: Box::new(Expr::Array(ArrayLit {
+                                            span: DUMMY_SP,
+                                            elems,
+                                        })),
+                                    })
+                                })
+                                .collect(),
+                        })),
+                    },
+                ],
+                type_args: None,
+            })
+        }
     }
 
     fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
@@ -130,7 +200,12 @@ impl VueJsxTransformVisitor {
         }
     }
 
-    fn transform_attrs(&mut self, attrs: &[JSXAttrOrSpread]) -> Expr {
+    fn transform_attrs(
+        &mut self,
+        attrs: &[JSXAttrOrSpread],
+        is_component: bool,
+        directives: &mut Vec<NormalDirective>,
+    ) -> Expr {
         if attrs.is_empty() {
             return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
         }
@@ -142,6 +217,133 @@ impl VueJsxTransformVisitor {
             ),
             |(mut props, mut merge_args), jsx_attr_or_spread| {
                 match jsx_attr_or_spread {
+                    JSXAttrOrSpread::JSXAttr(jsx_attr) if is_directive(jsx_attr) => {
+                        match parse_directive(jsx_attr, is_component) {
+                            Directive::Normal(directive) => directives.push(directive),
+                            Directive::Html(expr) => props.push(PropOrSpread::Prop(Box::new(
+                                Prop::KeyValue(KeyValueProp {
+                                    key: PropName::Ident(quote_ident!("innerHTML")),
+                                    value: Box::new(expr),
+                                }),
+                            ))),
+                            Directive::Text(expr) => props.push(PropOrSpread::Prop(Box::new(
+                                Prop::KeyValue(KeyValueProp {
+                                    key: PropName::Ident(quote_ident!("textContent")),
+                                    value: Box::new(expr),
+                                }),
+                            ))),
+                            Directive::VModel(directive) => {
+                                if is_component {
+                                    props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                        KeyValueProp {
+                                            key: match &directive.argument {
+                                                Some(Expr::Lit(Lit::Null(..))) | None => {
+                                                    PropName::Str(quote_str!("modelValue"))
+                                                }
+                                                Some(Expr::Lit(Lit::Str(Str {
+                                                    value, ..
+                                                }))) => PropName::Str(quote_str!(value)),
+                                                Some(expr) => {
+                                                    PropName::Computed(ComputedPropName {
+                                                        span: DUMMY_SP,
+                                                        expr: Box::new(expr.clone()),
+                                                    })
+                                                }
+                                            },
+                                            value: Box::new(directive.value.clone()),
+                                        },
+                                    ))));
+                                    if let Some(modifiers) = directive.modifiers {
+                                        props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                            KeyValueProp {
+                                                key: match &directive.argument {
+                                                    Some(Expr::Lit(Lit::Null(..))) | None => {
+                                                        PropName::Str(quote_str!("modelModifiers"))
+                                                    }
+                                                    Some(Expr::Lit(Lit::Str(Str {
+                                                        value,
+                                                        ..
+                                                    }))) => PropName::Str(quote_str!(format!(
+                                                        "{value}Modifiers"
+                                                    ))),
+                                                    Some(expr) => {
+                                                        PropName::Computed(ComputedPropName {
+                                                            span: DUMMY_SP,
+                                                            expr: Box::new(Expr::Bin(BinExpr {
+                                                                span: DUMMY_SP,
+                                                                op: op!(bin, "+"),
+                                                                left: Box::new(expr.clone()),
+                                                                right: Box::new(Expr::Lit(
+                                                                    Lit::Str(quote_str!(
+                                                                        "Modifiers"
+                                                                    )),
+                                                                )),
+                                                            })),
+                                                        })
+                                                    }
+                                                },
+                                                value: Box::new(modifiers),
+                                            },
+                                        ))))
+                                    }
+                                } else {
+                                    directives.push(NormalDirective {
+                                        name: JsWord::from("model"),
+                                        argument: directive.argument.clone(),
+                                        modifiers: directive.modifiers.clone(),
+                                        value: directive.value.clone(),
+                                    });
+                                }
+
+                                props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                    KeyValueProp {
+                                        key: match directive.argument {
+                                            Some(Expr::Lit(Lit::Null(..))) | None => {
+                                                PropName::Str(quote_str!("modelValue"))
+                                            }
+                                            Some(Expr::Lit(Lit::Str(Str { value, .. }))) => {
+                                                PropName::Str(quote_str!(value))
+                                            }
+                                            Some(expr) => PropName::Computed(ComputedPropName {
+                                                span: DUMMY_SP,
+                                                expr: Box::new(Expr::Bin(BinExpr {
+                                                    span: DUMMY_SP,
+                                                    op: op!(bin, "+"),
+                                                    left: Box::new(Expr::Lit(Lit::Str(
+                                                        quote_str!("onUpdate:"),
+                                                    ))),
+                                                    right: Box::new(expr),
+                                                })),
+                                            }),
+                                        },
+                                        value: Box::new(Expr::Arrow(ArrowExpr {
+                                            span: DUMMY_SP,
+                                            params: vec![Pat::Ident(BindingIdent {
+                                                id: quote_ident!("$event"),
+                                                type_ann: None,
+                                            })],
+                                            body: BlockStmtOrExpr::Expr(Box::new(Expr::Assign(
+                                                AssignExpr {
+                                                    span: DUMMY_SP,
+                                                    op: op!("="),
+                                                    left: PatOrExpr::Expr(Box::new(
+                                                        directive.value,
+                                                    )),
+                                                    right: Box::new(Expr::Ident(quote_ident!(
+                                                        "$event"
+                                                    ))),
+                                                },
+                                            ))),
+                                            is_async: false,
+                                            is_generator: false,
+                                            type_params: None,
+                                            return_type: None,
+                                        })),
+                                    },
+                                ))));
+                            }
+                        }
+                    }
                     JSXAttrOrSpread::JSXAttr(jsx_attr) => {
                         let attr_name = match &jsx_attr.name {
                             JSXAttrName::Ident(ident) => Cow::from(&*ident.sym),
@@ -471,6 +673,57 @@ impl VueJsxTransformVisitor {
             }],
             type_args: None,
         })
+    }
+
+    fn resolve_directive(&mut self, directive_name: &str, jsx_element: &JSXElement) -> Expr {
+        match directive_name {
+            "show" => Expr::Ident(self.import_from_vue("vShow")),
+            "model" => match &jsx_element.opening.name {
+                JSXElementName::Ident(ident) if &ident.sym == "select" => {
+                    Expr::Ident(self.import_from_vue("vModelSelect"))
+                }
+                JSXElementName::Ident(ident) if &ident.sym == "textarea" => {
+                    Expr::Ident(self.import_from_vue("vModelText"))
+                }
+                _ => {
+                    let typ = jsx_element
+                        .opening
+                        .attrs
+                        .iter()
+                        .find_map(|jsx_attr_or_spread| match jsx_attr_or_spread {
+                            JSXAttrOrSpread::JSXAttr(JSXAttr {
+                                name: JSXAttrName::Ident(ident),
+                                value,
+                                ..
+                            }) if &ident.sym == "type" => value.as_ref(),
+                            _ => None,
+                        });
+                    match typ {
+                        Some(JSXAttrValue::Lit(Lit::Str(str))) if &str.value == "checkbox" => {
+                            Expr::Ident(self.import_from_vue("vModelCheckbox"))
+                        }
+                        Some(JSXAttrValue::Lit(Lit::Str(str))) if &str.value == "radio" => {
+                            Expr::Ident(self.import_from_vue("vModelRadio"))
+                        }
+                        Some(JSXAttrValue::Lit(Lit::Str(..))) | None => {
+                            Expr::Ident(self.import_from_vue("vModelText"))
+                        }
+                        Some(..) => Expr::Ident(self.import_from_vue("vModelDynamic")),
+                    }
+                }
+            },
+            _ => Expr::Call(CallExpr {
+                span: DUMMY_SP,
+                callee: Callee::Expr(Box::new(Expr::Ident(
+                    self.import_from_vue("resolveDirective"),
+                ))),
+                args: vec![ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Lit(Lit::Str(quote_str!(directive_name)))),
+                }],
+                type_args: None,
+            }),
+        }
     }
 
     fn is_component(&self, element_name: &JSXElementName) -> bool {
