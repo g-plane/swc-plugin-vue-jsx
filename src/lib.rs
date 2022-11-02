@@ -1,12 +1,11 @@
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use options::Options;
-use std::{borrow::Cow, collections::HashMap, mem};
+use std::{borrow::Cow, collections::BTreeMap, mem};
 use swc_core::{
     common::{Mark, Spanned, DUMMY_SP},
     ecma::{
         ast::*,
         atoms::JsWord,
-        transforms::testing::test,
         utils::{private_ident, quote_ident, quote_str},
         visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
     },
@@ -15,6 +14,8 @@ use swc_core::{
 
 mod directive;
 mod options;
+#[cfg(test)]
+mod tests;
 mod util;
 
 const CREATE_VNODE: &str = "createVNode";
@@ -25,7 +26,7 @@ const KEEP_ALIVE: &str = "KeepAlive";
 #[derive(Default)]
 pub struct VueJsxTransformVisitor {
     options: Options,
-    vue_imports: HashMap<&'static str, Ident>,
+    vue_imports: BTreeMap<&'static str, Ident>,
     transform_on_helper: Option<Ident>,
     unresolved_mark: Mark,
 
@@ -867,28 +868,3 @@ pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
         ..Default::default()
     }))
 }
-
-test!(
-    swc_ecma_parser::Syntax::Es(swc_ecma_parser::EsConfig {
-        jsx: true,
-        ..Default::default()
-    }),
-    |_| {
-        use swc_core::{common::chain, ecma::transforms::base::resolver};
-        let unresolved_mark = Mark::new();
-        chain!(
-            resolver(unresolved_mark, Mark::new(), false),
-            as_folder(VueJsxTransformVisitor {
-                unresolved_mark,
-                slot_counter: 1,
-                options: Options {
-                    ..Default::default()
-                },
-                ..Default::default()
-            })
-        )
-    },
-    basic,
-    r#"const App = <Comp {...{a:b}} c='d'>{}{}</Comp>;"#,
-    r#""#
-);
