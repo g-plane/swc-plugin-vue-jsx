@@ -19,7 +19,6 @@ mod tests;
 mod util;
 
 const CREATE_VNODE: &str = "createVNode";
-const CREATE_TEXT_VNODE: &str = "createTextVNode";
 const FRAGMENT: &str = "Fragment";
 const KEEP_ALIVE: &str = "KeepAlive";
 
@@ -471,10 +470,12 @@ impl VueJsxTransformVisitor {
         let elems = children
             .iter()
             .filter_map(|child| match child {
-                JSXElementChild::JSXText(jsx_text) => Some(ExprOrSpread {
-                    spread: None,
-                    expr: Box::new(self.transform_jsx_text(jsx_text)),
-                }),
+                JSXElementChild::JSXText(jsx_text) => {
+                    self.transform_jsx_text(jsx_text).map(|expr| ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(expr),
+                    })
+                }
                 JSXElementChild::JSXExprContainer(JSXExprContainer {
                     expr: JSXExpr::JSXEmptyExpr(..),
                     ..
@@ -636,7 +637,7 @@ impl VueJsxTransformVisitor {
         ident
     }
 
-    fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Expr {
+    fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Option<Expr> {
         let jsx_text_value = jsx_text.value.replace('\t', " ");
         let mut jsx_text_lines = jsx_text_value.lines().enumerate().peekable();
 
@@ -656,23 +657,21 @@ impl VueJsxTransformVisitor {
             }
         }
         let text = lines.join(" ");
-        let lit = if text.is_empty() {
-            Lit::Null(Null { span: DUMMY_SP })
+        if text.is_empty() {
+            None
         } else {
-            Lit::Str(quote_str!(text))
-        };
-
-        Expr::Call(CallExpr {
-            span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(
-                self.import_from_vue(CREATE_TEXT_VNODE),
-            ))),
-            args: vec![ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Lit(lit)),
-            }],
-            type_args: None,
-        })
+            Some(Expr::Call(CallExpr {
+                span: DUMMY_SP,
+                callee: Callee::Expr(Box::new(Expr::Ident(
+                    self.import_from_vue("createTextVNode"),
+                ))),
+                args: vec![ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Lit(Lit::Str(quote_str!(text)))),
+                }],
+                type_args: None,
+            }))
+        }
     }
 
     fn resolve_directive(&mut self, directive_name: &str, jsx_element: &JSXElement) -> Expr {
