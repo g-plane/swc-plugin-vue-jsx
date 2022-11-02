@@ -289,7 +289,7 @@ impl VueJsxTransformVisitor {
                                 } else {
                                     directives.push(NormalDirective {
                                         name: JsWord::from("model"),
-                                        argument: directive.argument.clone(),
+                                        argument: directive.transformed_argument,
                                         modifiers: directive.modifiers.clone(),
                                         value: directive.value.clone(),
                                     });

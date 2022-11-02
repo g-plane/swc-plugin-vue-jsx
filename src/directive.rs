@@ -26,6 +26,7 @@ pub(crate) struct NormalDirective {
 
 pub(crate) struct VModelDirective {
     pub(crate) argument: Option<Expr>,
+    pub(crate) transformed_argument: Option<Expr>,
     pub(crate) modifiers: Option<Expr>,
     pub(crate) value: Expr,
 }
@@ -262,7 +263,8 @@ fn parse_v_model_directive(
     }
 
     Directive::VModel(VModelDirective {
-        argument: if is_component
+        argument: argument.clone(),
+        transformed_argument: if !is_component
             && modifiers
                 .as_ref()
                 .map(|modifiers| !modifiers.is_empty())
@@ -297,7 +299,7 @@ fn transform_modifiers(modifiers: HashSet<JsWord>) -> Option<Expr> {
                 .into_iter()
                 .map(|modifier| {
                     PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                        key: PropName::Str(quote_str!(modifier)),
+                        key: PropName::Ident(quote_ident!(modifier)),
                         value: Box::new(Expr::Lit(Lit::Bool(Bool {
                             span: DUMMY_SP,
                             value: true,
