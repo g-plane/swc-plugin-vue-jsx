@@ -10,7 +10,7 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
     let arg = private_ident!("s");
 
     FnDecl {
-        ident: helper_name.clone(),
+        ident: helper_name,
         declare: false,
         function: Box::new(Function {
             params: vec![Param {
@@ -76,7 +76,7 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
                                     callee: Callee::Expr(Box::new(Expr::Ident(is_vnode))),
                                     args: vec![ExprOrSpread {
                                         spread: None,
-                                        expr: Box::new(Expr::Ident(arg.clone())),
+                                        expr: Box::new(Expr::Ident(arg)),
                                     }],
                                     type_args: None,
                                 })),

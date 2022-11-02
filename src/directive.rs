@@ -71,7 +71,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
             if let Some(Some(ExprOrSpread { spread: None, expr })) = elems.get(1) {
                 match &**expr {
                     Expr::Array(ArrayLit { elems, .. }) => {
-                        modifiers = Some(parse_modifiers(&elems));
+                        modifiers = Some(parse_modifiers(elems));
                     }
                     expr => {
                         if argument.is_none() {
@@ -79,7 +79,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
                         }
                         if let Some(Some(ExprOrSpread { spread: None, expr })) = elems.get(2) {
                             if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
-                                modifiers = Some(parse_modifiers(&elems));
+                                modifiers = Some(parse_modifiers(elems));
                             }
                         }
                     }
@@ -253,7 +253,7 @@ fn parse_v_model_directive(
                     if is_component && argument.is_none() {
                         argument = Some(Expr::Lit(Lit::Null(Null { span: DUMMY_SP })));
                     }
-                    modifiers = Some(parse_modifiers(&elems));
+                    modifiers = Some(parse_modifiers(elems));
                 }
                 expr => {
                     if argument.is_none() {
@@ -261,7 +261,7 @@ fn parse_v_model_directive(
                     }
                     if let Some(Some(ExprOrSpread { spread: None, expr })) = elems.get(2) {
                         if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
-                            modifiers = Some(parse_modifiers(&elems));
+                            modifiers = Some(parse_modifiers(elems));
                         }
                     }
                 }

@@ -366,7 +366,7 @@ impl VueJsxTransformVisitor {
                                 JSXAttrValue::JSXExprContainer(JSXExprContainer {
                                     expr: JSXExpr::JSXEmptyExpr(expr),
                                     ..
-                                }) => Box::new(Expr::JSXEmpty(expr.clone())),
+                                }) => Box::new(Expr::JSXEmpty(*expr)),
                                 JSXAttrValue::JSXElement(element) => {
                                     Box::new(Expr::JSXElement(element.clone()))
                                 }
@@ -420,12 +420,10 @@ impl VueJsxTransformVisitor {
                             } else {
                                 props.extend_from_slice(&object.props);
                             }
+                        } else if self.options.merge_props {
+                            merge_args.push(*spread.expr.clone());
                         } else {
-                            if self.options.merge_props {
-                                merge_args.push(*spread.expr.clone());
-                            } else {
-                                props.push(PropOrSpread::Spread(spread.clone()));
-                            }
+                            props.push(PropOrSpread::Spread(spread.clone()));
                         }
                     }
                 }
@@ -472,7 +470,7 @@ impl VueJsxTransformVisitor {
     fn transform_children(&mut self, children: &[JSXElementChild], is_component: bool) -> Expr {
         let elems = children
             .iter()
-            .map(|child| match child {
+            .filter_map(|child| match child {
                 JSXElementChild::JSXText(jsx_text) => Some(ExprOrSpread {
                     spread: None,
                     expr: Box::new(self.transform_jsx_text(jsx_text)),
@@ -496,14 +494,13 @@ impl VueJsxTransformVisitor {
                 }
                 JSXElementChild::JSXElement(jsx_element) => Some(ExprOrSpread {
                     spread: None,
-                    expr: Box::new(self.transform_jsx_element(&*jsx_element)),
+                    expr: Box::new(self.transform_jsx_element(jsx_element)),
                 }),
                 JSXElementChild::JSXFragment(jsx_fragment) => Some(ExprOrSpread {
                     spread: None,
                     expr: Box::new(self.transform_jsx_fragment(jsx_fragment)),
                 }),
             })
-            .filter_map(|item| item)
             .map(Some)
             .collect::<Vec<_>>();
 
@@ -731,7 +728,7 @@ impl VueJsxTransformVisitor {
 
     fn is_component(&self, element_name: &JSXElementName) -> bool {
         let name = match element_name {
-            JSXElementName::Ident(Ident { sym, .. }) => &*sym,
+            JSXElementName::Ident(Ident { sym, .. }) => sym,
             JSXElementName::JSXMemberExpr(JSXMemberExpr { prop, .. }) => &*prop.sym,
             JSXElementName::JSXNamespacedName(JSXNamespacedName { name, .. }) => &*name.sym,
         };
