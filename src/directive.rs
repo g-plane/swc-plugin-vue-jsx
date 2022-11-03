@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::Split};
+use std::{collections::BTreeSet, str::Split};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -123,7 +123,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
     })
 }
 
-fn parse_modifiers(exprs: &[Option<ExprOrSpread>]) -> HashSet<JsWord> {
+fn parse_modifiers(exprs: &[Option<ExprOrSpread>]) -> BTreeSet<JsWord> {
     exprs
         .iter()
         .filter_map(|expr| match expr {
@@ -289,7 +289,7 @@ fn parse_v_model_directive(
     })
 }
 
-fn transform_modifiers(modifiers: HashSet<JsWord>) -> Option<Expr> {
+fn transform_modifiers(modifiers: BTreeSet<JsWord>) -> Option<Expr> {
     if modifiers.is_empty() {
         None
     } else {
