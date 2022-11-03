@@ -19,11 +19,10 @@ macro_rules! test {
                 let unresolved_mark = Mark::new();
                 chain!(
                     resolver(unresolved_mark, Mark::new(), false),
-                    as_folder(VueJsxTransformVisitor {
-                        unresolved_mark,
-                        slot_counter: 1,
-                        ..Default::default()
-                    })
+                    as_folder(VueJsxTransformVisitor::new(
+                        Default::default(),
+                        unresolved_mark
+                    ))
                 )
             },
             $name,
@@ -41,12 +40,7 @@ macro_rules! test {
                 let unresolved_mark = Mark::new();
                 chain!(
                     resolver(unresolved_mark, Mark::new(), false),
-                    as_folder(VueJsxTransformVisitor {
-                        unresolved_mark,
-                        slot_counter: 1,
-                        options: $options,
-                        ..Default::default()
-                    })
+                    as_folder(VueJsxTransformVisitor::new($options, unresolved_mark))
                 )
             },
             $name,

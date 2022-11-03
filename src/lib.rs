@@ -35,6 +35,15 @@ pub struct VueJsxTransformVisitor {
 }
 
 impl VueJsxTransformVisitor {
+    pub fn new(options: Options, unresolved_mark: Mark) -> Self {
+        Self {
+            unresolved_mark,
+            slot_counter: 1,
+            options,
+            ..Default::default()
+        }
+    }
+
     fn import_from_vue(&mut self, item: &'static str) -> Ident {
         self.vue_imports
             .entry(item)
@@ -857,10 +866,8 @@ pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
             serde_json::from_str(&json).expect("failed to parse config of plugin 'vue-jsx'")
         })
         .unwrap_or_default();
-    program.fold_with(&mut as_folder(VueJsxTransformVisitor {
-        unresolved_mark: metadata.unresolved_mark,
-        slot_counter: 1,
+    program.fold_with(&mut as_folder(VueJsxTransformVisitor::new(
         options,
-        ..Default::default()
-    }))
+        metadata.unresolved_mark,
+    )))
 }
