@@ -225,3 +225,90 @@ test!(
     }), [_createTextVNode("btn")]);
 "#
 );
+
+test!(
+    single_attr,
+    "<div {...x}>single</div>",
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    _createVNode("div", x, [_createTextVNode("single")]);
+"#
+);
+
+test!(
+    keep_namespace_import,
+    r#"
+    import * as Vue from 'vue';
+    <div>Vue</div>"#,
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    import * as Vue from 'vue';
+    _createVNode("div", null, [_createTextVNode("Vue")]);
+"#
+);
+
+test!(
+    without_jsx,
+    r#"
+    import { createVNode } from 'vue';
+    createVNode('div', null, ['Without JSX should work']);"#,
+    r#"
+    import { createVNode } from 'vue';
+    createVNode('div', null, ['Without JSX should work']);
+"#
+);
+
+test!(
+    custom_directive_with_argument_and_modifiers,
+    r#"
+    <>
+        <A v-xxx={x} />
+        <A v-xxx={[x]} />
+        <A v-xxx={[x, 'y']} />
+        <A v-xxx={[x, 'y', ['a', 'b']]} />
+        <A v-xxx={[x, ['a', 'b']]} />
+        <A v-xxx={[x, y, ['a', 'b']]} />
+        <A v-xxx={[x, y, ['a', 'b']]} />
+      </>"#,
+    r#"
+    import {
+        Fragment as _Fragment,
+        createVNode as _createVNode,
+        resolveComponent as _resolveComponent,
+        resolveDirective as _resolveDirective,
+        withDirectives as _withDirectives,
+    } from "vue";
+    _createVNode(_Fragment, null, [
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, 'y']]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, 'y', {
+            a: true,
+            b: true
+        }]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, void 0, {
+            a: true,
+            b: true
+        }]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, y, {
+            a: true,
+            b: true
+        }]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, y, {
+            a: true,
+            b: true
+        }]]),
+    ]);
+"#
+);
+
+test!(
+    model_as_prop_name,
+    r#"<C v-model={[foo, "model"]} />"#,
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("C"), {
+        "model": foo,
+        "onUpdate:model": $event => foo = $event
+    }, null);"#
+);
