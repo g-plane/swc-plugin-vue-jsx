@@ -118,7 +118,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
         } else {
             argument
         },
-        modifiers: modifiers.and_then(transform_modifiers),
+        modifiers: modifiers.and_then(|modifiers| transform_modifiers(modifiers, false)),
         value,
     })
 }
@@ -284,12 +284,12 @@ fn parse_v_model_directive(
         } else {
             argument
         },
-        modifiers: modifiers.and_then(transform_modifiers),
+        modifiers: modifiers.and_then(|modifiers| transform_modifiers(modifiers, is_component)),
         value,
     })
 }
 
-fn transform_modifiers(modifiers: BTreeSet<JsWord>) -> Option<Expr> {
+fn transform_modifiers(modifiers: BTreeSet<JsWord>, quote_prop: bool) -> Option<Expr> {
     if modifiers.is_empty() {
         None
     } else {
@@ -299,7 +299,11 @@ fn transform_modifiers(modifiers: BTreeSet<JsWord>) -> Option<Expr> {
                 .into_iter()
                 .map(|modifier| {
                     PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                        key: PropName::Ident(quote_ident!(modifier)),
+                        key: if quote_prop {
+                            PropName::Str(quote_str!(modifier))
+                        } else {
+                            PropName::Ident(quote_ident!(modifier))
+                        },
                         value: Box::new(Expr::Lit(Lit::Bool(Bool {
                             span: DUMMY_SP,
                             value: true,

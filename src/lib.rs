@@ -321,7 +321,7 @@ impl VueJsxTransformVisitor {
                                                     span: DUMMY_SP,
                                                     op: op!(bin, "+"),
                                                     left: Box::new(Expr::Lit(Lit::Str(
-                                                        quote_str!("onUpdate:"),
+                                                        quote_str!("onUpdate"),
                                                     ))),
                                                     right: Box::new(expr),
                                                 })),

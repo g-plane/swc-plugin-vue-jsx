@@ -312,3 +312,66 @@ test!(
         "onUpdate:model": $event => foo = $event
     }, null);"#
 );
+
+test!(
+    v_model_value_supports_variable,
+    "
+    const foo = 'foo';
+
+    const a = () => 'a';
+
+    const b = { c: 'c' };
+    <>
+        <A v-model={[xx, foo]} />
+        <B v-model={[xx, ['a']]} />
+        <C v-model={[xx, foo, ['a']]} />
+        <D v-model={[xx, foo === 'foo' ? 'a' : 'b', ['a']]} />
+        <E v-model={[xx, a(), ['a']]} />
+        <F v-model={[xx, b.c, ['a']]} />
+    </>
+",
+    r#"
+    import { Fragment as _Fragment, createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    const foo = 'foo';
+    const a = () => 'a';
+    const b = {
+        c: 'c'
+    };
+    _createVNode(_Fragment, null, [
+        _createVNode(_resolveComponent("A"), { [foo]: xx, ["onUpdate" + foo]: $event => xx = $event }, null),
+        _createVNode(_resolveComponent("B"), {
+            "modelValue": xx,
+            "modelModifiers": { "a": true },
+            "onUpdate:modelValue": $event => xx = $event,
+        }, null),
+        _createVNode(_resolveComponent("C"), {
+            [foo]: xx,
+            [foo + "Modifiers"]: {
+                "a": true
+            },
+            ["onUpdate" + foo]: $event => xx = $event,
+        }, null),
+        _createVNode(_resolveComponent("D"), {
+            [foo === 'foo' ? 'a' : 'b']: xx,
+            [(foo === 'foo' ? 'a' : 'b') + "Modifiers"]: {
+                "a": true
+            },
+            ["onUpdate" + (foo === 'foo' ? 'a' : 'b')]: $event => xx = $event,
+        }, null),
+        _createVNode(_resolveComponent("E"), {
+            [a()]: xx,
+            [a() + "Modifiers"]: {
+                "a": true
+            },
+            ["onUpdate" + a()]: $event => xx = $event
+        }, null),
+        _createVNode(_resolveComponent("F"), {
+            [b.c]: xx,
+            [b.c + "Modifiers"]: {
+                "a": true
+            },
+            ["onUpdate" + b.c]: $event => xx = $event
+        }, null),
+    ]);
+    "#
+);
