@@ -1,4 +1,4 @@
-use crate::VueJsxTransformVisitor;
+use crate::{Options, VueJsxTransformVisitor};
 use swc_core::{
     common::{chain, Mark},
     ecma::{
@@ -20,7 +20,10 @@ macro_rules! test {
                 chain!(
                     resolver(unresolved_mark, Mark::new(), false),
                     as_folder(VueJsxTransformVisitor::new(
-                        Default::default(),
+                        Options {
+                            optimize: true,
+                            ..Default::default()
+                        },
                         unresolved_mark
                     ))
                 )
@@ -58,7 +61,7 @@ test!(
     _withDirectives(_createVNode("input", {
         "type": "checkbox",
         "onUpdate:modelValue": $event => test = $event
-    }, null), [[_vModelCheckbox, test]]);"#
+    }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, test]]);"#
 );
 
 test!(
@@ -76,12 +79,12 @@ test!(
         "value": "1",
         "onUpdate:modelValue": $event => test = $event,
         "name": "test"
-    }, null), [[_vModelRadio, test]]), _withDirectives(_createVNode("input", {
+    }, null, 8, ["onUpdate:modelValue"]), [[_vModelRadio, test]]), _withDirectives(_createVNode("input", {
         "type": "radio",
         "value": "2",
         "onUpdate:modelValue": $event => test = $event,
         "name": "test"
-    }, null), [[_vModelRadio, test]])]);"#
+    }, null, 8, ["onUpdate:modelValue"]), [[_vModelRadio, test]])]);"#
 );
 
 test!(
@@ -108,7 +111,7 @@ test!(
         "value": 2
     }, [_createTextVNode("b")]), _createVNode("option", {
         "value": 3
-    }, [_createTextVNode("c")])]), [[_vModelSelect, test]]);"#
+    }, [_createTextVNode("c")])], 8, ["onUpdate:modelValue"]), [[_vModelSelect, test]]);"#
 );
 
 test!(
@@ -118,7 +121,7 @@ test!(
     import { createVNode as _createVNode, vModelText as _vModelText, withDirectives as _withDirectives } from "vue";
     _withDirectives(_createVNode("textarea", {
         "onUpdate:modelValue": $event => test = $event
-    }, null), [[_vModelText, test]]);"#
+    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, test]]);"#
 );
 
 test!(
@@ -128,7 +131,7 @@ test!(
     import { createVNode as _createVNode, vModelText as _vModelText, withDirectives as _withDirectives } from "vue";
     _withDirectives(_createVNode("input", {
         "onUpdate:modelValue": $event => test = $event
-    }, null), [[_vModelText, test]]);"#
+    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, test]]);"#
 );
 
 test!(
@@ -139,7 +142,7 @@ test!(
     _withDirectives(_createVNode("input", {
         "type": type,
         "onUpdate:modelValue": $event => test = $event
-    }, null), [[_vModelDynamic, test]]);"#
+    }, null, 8, ["onUpdate:modelValue", "type"]), [[_vModelDynamic, test]]);"#
 );
 
 test!(
@@ -152,7 +155,7 @@ test!(
         vShow as _vShow,
         withDirectives as _withDirectives,
     } from "vue";
-    _withDirectives(_createVNode("div", null, [_createTextVNode("vShow")]), [[_vShow, x]]);
+    _withDirectives(_createVNode("div", null, [_createTextVNode("vShow")], 512), [[_vShow, x]]);
 "#
 );
 
@@ -163,7 +166,7 @@ test!(
     import { createVNode as _createVNode, vModelText as _vModelText, withDirectives as _withDirectives } from "vue";
     _withDirectives(_createVNode("input", {
         "onUpdate:modelValue": $event => test = $event
-    }, null), [[_vModelText, test, void 0, {
+    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, test, void 0, {
         lazy: true
     }]]);"#
 );
@@ -178,7 +181,7 @@ test!(
         resolveDirective as _resolveDirective,
         withDirectives as _withDirectives,
     } from "vue";
-    _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("cus"), x]]);
+    _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("cus"), x]]);
 "#
 );
 
@@ -189,7 +192,7 @@ test!(
     import { createVNode as _createVNode } from "vue";
     _createVNode("h1", {
         "innerHTML": "<div>foo</div>"
-    }, null);
+    }, null, 8, ["innerHTML"]);
 "#
 );
 
@@ -200,7 +203,7 @@ test!(
     import { createVNode as _createVNode } from "vue";
     _createVNode("div", {
         "textContent": text
-    }, null);
+    }, null, 8, ["textContent"]);
 "#
 );
 
@@ -222,7 +225,7 @@ test!(
         "loading": true
     }, x, {
         "type": "submit"
-    }), [_createTextVNode("btn")]);
+    }), [_createTextVNode("btn")], 16, ["loading"]);
 "#
 );
 
@@ -231,7 +234,7 @@ test!(
     "<div {...x}>single</div>",
     r#"
     import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
-    _createVNode("div", x, [_createTextVNode("single")]);
+    _createVNode("div", x, [_createTextVNode("single")], 16);
 "#
 );
 
@@ -279,22 +282,22 @@ test!(
         withDirectives as _withDirectives,
     } from "vue";
     _createVNode(_Fragment, null, [
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x]]),
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x]]),
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, 'y']]),
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, 'y', {
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x]]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x, 'y']]),
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x, 'y', {
             a: true,
             b: true
         }]]),
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, void 0, {
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x, void 0, {
             a: true,
             b: true
         }]]),
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, y, {
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x, y, {
             a: true,
             b: true
         }]]),
-        _withDirectives(_createVNode(_resolveComponent("A"), null, null), [[_resolveDirective("xxx"), x, y, {
+        _withDirectives(_createVNode(_resolveComponent("A"), null, null, 512), [[_resolveDirective("xxx"), x, y, {
             a: true,
             b: true
         }]]),
@@ -310,7 +313,7 @@ test!(
     _createVNode(_resolveComponent("C"), {
         "model": foo,
         "onUpdate:model": $event => foo = $event
-    }, null);"#
+    }, null, 8, ["model", "onUpdate:model"]);"#
 );
 
 test!(
@@ -338,40 +341,40 @@ test!(
         c: 'c'
     };
     _createVNode(_Fragment, null, [
-        _createVNode(_resolveComponent("A"), { [foo]: xx, ["onUpdate" + foo]: $event => xx = $event }, null),
+        _createVNode(_resolveComponent("A"), { [foo]: xx, ["onUpdate" + foo]: $event => xx = $event }, null, 16),
         _createVNode(_resolveComponent("B"), {
             "modelValue": xx,
             "modelModifiers": { "a": true },
             "onUpdate:modelValue": $event => xx = $event,
-        }, null),
+        }, null, 8, ["modelValue", "onUpdate:modelValue"]),
         _createVNode(_resolveComponent("C"), {
             [foo]: xx,
             [foo + "Modifiers"]: {
                 "a": true
             },
             ["onUpdate" + foo]: $event => xx = $event,
-        }, null),
+        }, null, 16),
         _createVNode(_resolveComponent("D"), {
             [foo === 'foo' ? 'a' : 'b']: xx,
             [(foo === 'foo' ? 'a' : 'b') + "Modifiers"]: {
                 "a": true
             },
             ["onUpdate" + (foo === 'foo' ? 'a' : 'b')]: $event => xx = $event,
-        }, null),
+        }, null, 16),
         _createVNode(_resolveComponent("E"), {
             [a()]: xx,
             [a() + "Modifiers"]: {
                 "a": true
             },
             ["onUpdate" + a()]: $event => xx = $event
-        }, null),
+        }, null, 16),
         _createVNode(_resolveComponent("F"), {
             [b.c]: xx,
             [b.c + "Modifiers"]: {
                 "a": true
             },
             ["onUpdate" + b.c]: $event => xx = $event
-        }, null),
+        }, null, 16),
     ]);
     "#
 );

@@ -1285,6 +1285,7 @@ dependencies = [
 name = "swc-plugin-vue-jsx"
 version = "0.0.0"
 dependencies = [
+ "bitflags",
  "css_dataset",
  "regex",
  "serde",

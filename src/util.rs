@@ -92,3 +92,44 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
         }),
     }
 }
+
+pub(crate) fn is_jsx_attr_value_constant(value: &JSXAttrValue) -> bool {
+    match value {
+        JSXAttrValue::Lit(..) => true,
+        JSXAttrValue::JSXExprContainer(JSXExprContainer {
+            expr: JSXExpr::Expr(expr),
+            ..
+        }) => is_constant(&expr),
+        _ => false,
+    }
+}
+
+fn is_constant(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ident(ident) => &ident.sym == "undefined",
+        Expr::Array(ArrayLit { elems, .. }) => elems.iter().all(|element| match element {
+            Some(ExprOrSpread { spread: None, expr }) => is_constant(expr),
+            _ => false,
+        }),
+        Expr::Object(ObjectLit { props, .. }) => props.iter().all(|prop| {
+            if let PropOrSpread::Prop(prop) = prop {
+                match &**prop {
+                    Prop::KeyValue(KeyValueProp { value, .. }) => is_constant(&value),
+                    Prop::Shorthand(ident) => &ident.sym == "undefined",
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        }),
+        Expr::Lit(..) => true,
+        _ => false,
+    }
+}
+
+pub(crate) fn is_on(attr_name: &str) -> bool {
+    match attr_name.as_bytes() {
+        [b'o', b'n', c, ..] => !c.is_ascii_lowercase(),
+        _ => false,
+    }
+}

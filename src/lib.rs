@@ -1,6 +1,11 @@
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use options::Options;
-use std::{borrow::Cow, collections::BTreeMap, mem};
+use patch_flags::PatchFlags;
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    mem,
+};
 use swc_core::{
     common::{Mark, Spanned, DUMMY_SP},
     ecma::{
@@ -14,6 +19,7 @@ use swc_core::{
 
 mod directive;
 mod options;
+mod patch_flags;
 #[cfg(test)]
 mod tests;
 mod util;
@@ -60,27 +66,59 @@ impl VueJsxTransformVisitor {
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
         let is_component = self.is_component(&jsx_element.opening.name);
         let mut directives = vec![];
+        let (attributes, patch_flags, dynamic_props) =
+            self.transform_attrs(&jsx_element.opening.attrs, is_component, &mut directives);
+        let mut vnode_call_args = vec![
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(self.transform_tag(&jsx_element.opening.name)),
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(attributes),
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(self.transform_children(&jsx_element.children, is_component)),
+            },
+        ];
+        if self.options.optimize {
+            if !patch_flags.is_empty() {
+                vnode_call_args.push(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Lit(Lit::Num(Number {
+                        span: DUMMY_SP,
+                        value: patch_flags.bits() as f64,
+                        raw: None,
+                    }))),
+                });
+            }
+            match dynamic_props {
+                Some(dynamic_props) if !dynamic_props.is_empty() => {
+                    vnode_call_args.push(ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(Expr::Array(ArrayLit {
+                            span: DUMMY_SP,
+                            elems: dynamic_props
+                                .into_iter()
+                                .map(|prop| {
+                                    Some(ExprOrSpread {
+                                        spread: None,
+                                        expr: Box::new(Expr::Lit(Lit::Str(quote_str!(prop)))),
+                                    })
+                                })
+                                .collect(),
+                        })),
+                    })
+                }
+                _ => {}
+            }
+        }
+
         let create_vnode_call = Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
-            args: vec![
-                ExprOrSpread {
-                    spread: None,
-                    expr: Box::new(self.transform_tag(&jsx_element.opening.name)),
-                },
-                ExprOrSpread {
-                    spread: None,
-                    expr: Box::new(self.transform_attrs(
-                        &jsx_element.opening.attrs,
-                        is_component,
-                        &mut directives,
-                    )),
-                },
-                ExprOrSpread {
-                    spread: None,
-                    expr: Box::new(self.transform_children(&jsx_element.children, is_component)),
-                },
-            ],
+            args: vnode_call_args,
             type_args: None,
         });
 
@@ -209,15 +247,28 @@ impl VueJsxTransformVisitor {
         }
     }
 
-    fn transform_attrs(
+    fn transform_attrs<'a>(
         &mut self,
-        attrs: &[JSXAttrOrSpread],
+        attrs: &'a [JSXAttrOrSpread],
         is_component: bool,
         directives: &mut Vec<NormalDirective>,
-    ) -> Expr {
+    ) -> (Expr, PatchFlags, Option<BTreeSet<Cow<'a, str>>>) {
         if attrs.is_empty() {
-            return Expr::Lit(Lit::Null(Null { span: DUMMY_SP }));
+            return (
+                Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
+                PatchFlags::empty(),
+                None,
+            );
         }
+
+        let mut dynamic_props = BTreeSet::new();
+
+        // patch flags analysis
+        let mut has_ref = false;
+        let mut has_class_binding = false;
+        let mut has_style_binding = false;
+        let mut has_hydration_event_binding = false;
+        let mut has_dynamic_keys = false;
 
         let (mut props, mut merge_args) = attrs.iter().fold(
             (
@@ -229,29 +280,40 @@ impl VueJsxTransformVisitor {
                     JSXAttrOrSpread::JSXAttr(jsx_attr) if is_directive(jsx_attr) => {
                         match parse_directive(jsx_attr, is_component) {
                             Directive::Normal(directive) => directives.push(directive),
-                            Directive::Html(expr) => props.push(PropOrSpread::Prop(Box::new(
-                                Prop::KeyValue(KeyValueProp {
-                                    key: PropName::Str(quote_str!("innerHTML")),
-                                    value: Box::new(expr),
-                                }),
-                            ))),
-                            Directive::Text(expr) => props.push(PropOrSpread::Prop(Box::new(
-                                Prop::KeyValue(KeyValueProp {
-                                    key: PropName::Str(quote_str!("textContent")),
-                                    value: Box::new(expr),
-                                }),
-                            ))),
+                            Directive::Html(expr) => {
+                                props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                    KeyValueProp {
+                                        key: PropName::Str(quote_str!("innerHTML")),
+                                        value: Box::new(expr),
+                                    },
+                                ))));
+                                dynamic_props.insert("innerHTML".into());
+                            }
+                            Directive::Text(expr) => {
+                                props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                    KeyValueProp {
+                                        key: PropName::Str(quote_str!("textContent")),
+                                        value: Box::new(expr),
+                                    },
+                                ))));
+                                dynamic_props.insert("textContent".into());
+                            }
                             Directive::VModel(directive) => {
                                 if is_component {
                                     props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
                                         KeyValueProp {
                                             key: match &directive.argument {
                                                 Some(Expr::Lit(Lit::Null(..))) | None => {
+                                                    dynamic_props.insert("modelValue".into());
                                                     PropName::Str(quote_str!("modelValue"))
                                                 }
                                                 Some(Expr::Lit(Lit::Str(Str {
                                                     value, ..
-                                                }))) => PropName::Str(quote_str!(value)),
+                                                }))) => {
+                                                    dynamic_props
+                                                        .insert(Cow::from(value.to_string()));
+                                                    PropName::Str(quote_str!(value))
+                                                }
                                                 Some(expr) => {
                                                     PropName::Computed(ComputedPropName {
                                                         span: DUMMY_SP,
@@ -308,24 +370,29 @@ impl VueJsxTransformVisitor {
                                     KeyValueProp {
                                         key: match directive.argument {
                                             Some(Expr::Lit(Lit::Null(..))) | None => {
+                                                dynamic_props.insert("onUpdate:modelValue".into());
                                                 PropName::Str(quote_str!("onUpdate:modelValue"))
                                             }
                                             Some(Expr::Lit(Lit::Str(Str { value, .. }))) => {
-                                                PropName::Str(quote_str!(format!(
-                                                    "onUpdate:{value}"
-                                                )))
+                                                let name = format!("onUpdate:{value}");
+                                                let prop_name = PropName::Str(quote_str!(&*name));
+                                                dynamic_props.insert(name.into());
+                                                prop_name
                                             }
-                                            Some(expr) => PropName::Computed(ComputedPropName {
-                                                span: DUMMY_SP,
-                                                expr: Box::new(Expr::Bin(BinExpr {
+                                            Some(expr) => {
+                                                has_dynamic_keys = true;
+                                                PropName::Computed(ComputedPropName {
                                                     span: DUMMY_SP,
-                                                    op: op!(bin, "+"),
-                                                    left: Box::new(Expr::Lit(Lit::Str(
-                                                        quote_str!("onUpdate"),
-                                                    ))),
-                                                    right: Box::new(expr),
-                                                })),
-                                            }),
+                                                    expr: Box::new(Expr::Bin(BinExpr {
+                                                        span: DUMMY_SP,
+                                                        op: op!(bin, "+"),
+                                                        left: Box::new(Expr::Lit(Lit::Str(
+                                                            quote_str!("onUpdate"),
+                                                        ))),
+                                                        right: Box::new(expr),
+                                                    })),
+                                                })
+                                            }
                                         },
                                         value: Box::new(Expr::Arrow(ArrowExpr {
                                             span: DUMMY_SP,
@@ -389,6 +456,33 @@ impl VueJsxTransformVisitor {
                                 })))
                             });
 
+                        if attr_name == "ref" {
+                            has_ref = true;
+                        } else if !jsx_attr
+                            .value
+                            .as_ref()
+                            .map(util::is_jsx_attr_value_constant)
+                            .unwrap_or_default()
+                        {
+                            if !is_component && util::is_on(&attr_name)
+                                // omit the flag for click handlers becaues hydration gives click
+                                // dedicated fast path.
+                                && !attr_name.eq_ignore_ascii_case("onclick")
+                                // omit v-model handlers
+                                && attr_name != "onUpdate:modelValue"
+                            {
+                                has_hydration_event_binding = true;
+                            }
+                            match &*attr_name {
+                                "class" if !is_component => has_class_binding = true,
+                                "style" if !is_component => has_style_binding = true,
+                                "key" | "on" | "ref" => {}
+                                _ => {
+                                    dynamic_props.insert(attr_name.clone());
+                                }
+                            }
+                        }
+
                         if self.options.transform_on
                             && (attr_name == "on" || attr_name == "nativeOn")
                         {
@@ -415,6 +509,8 @@ impl VueJsxTransformVisitor {
                         }
                     }
                     JSXAttrOrSpread::SpreadElement(spread) => {
+                        has_dynamic_keys = true;
+
                         if !props.is_empty() && self.options.merge_props {
                             merge_args.push(Expr::Object(ObjectLit {
                                 span: DUMMY_SP,
@@ -439,7 +535,7 @@ impl VueJsxTransformVisitor {
             },
         );
 
-        if !merge_args.is_empty() {
+        let expr = if !merge_args.is_empty() {
             if !props.is_empty() {
                 merge_args.push(Expr::Object(ObjectLit {
                     span: DUMMY_SP,
@@ -472,7 +568,32 @@ impl VueJsxTransformVisitor {
             }
         } else {
             Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+        };
+
+        let mut patch_flags = PatchFlags::empty();
+        if has_dynamic_keys {
+            patch_flags.insert(PatchFlags::FULL_PROPS);
+        } else {
+            if has_class_binding {
+                patch_flags.insert(PatchFlags::CLASS);
+            }
+            if has_style_binding {
+                patch_flags.insert(PatchFlags::STYLE);
+            }
+            if !dynamic_props.is_empty() {
+                patch_flags.insert(PatchFlags::PROPS);
+            }
+            if has_hydration_event_binding {
+                patch_flags.insert(PatchFlags::HYDRATE_EVENTS);
+            }
         }
+        if (patch_flags.is_empty() || patch_flags == PatchFlags::HYDRATE_EVENTS)
+            && (has_ref || !directives.is_empty())
+        {
+            patch_flags.insert(PatchFlags::NEED_PATCH);
+        }
+
+        (expr, patch_flags, Some(dynamic_props))
     }
 
     fn transform_children(&mut self, children: &[JSXElementChild], is_component: bool) -> Expr {
