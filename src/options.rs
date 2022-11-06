@@ -42,6 +42,12 @@ fn default_true() -> bool {
 
 pub struct Regex(regex::Regex);
 
+impl Regex {
+    pub fn new(re: &str) -> Result<Self, regex::Error> {
+        regex::Regex::new(re).map(Self)
+    }
+}
+
 impl From<regex::Regex> for Regex {
     fn from(value: regex::Regex) -> Self {
         Self(value)

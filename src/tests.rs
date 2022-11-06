@@ -378,3 +378,50 @@ test!(
     ]);
     "#
 );
+
+test!(
+    override_props_single,
+    "<div {...a} />",
+    r#"
+    import { createVNode as _createVNode } from "vue";
+    _createVNode("div", a, null);
+    "#,
+    Options {
+        merge_props: false,
+        ..Default::default()
+    }
+);
+
+test!(
+    override_props_multiple,
+    r#"<A loading {...a} {...{ b: 1, c: { d: 2 } }} class="x" style={x} />"#,
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("A"), {
+        "loading": true,
+        ...a,
+        b: 1,
+        c: {
+            d: 2
+        },
+        "class": "x",
+        "style": x
+    }, null);
+    "#,
+    Options {
+        merge_props: false,
+        ..Default::default()
+    }
+);
+
+test!(
+    custom_element,
+    "<foo><span>foo</span></foo>",
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    _createVNode("foo", null, [_createVNode("span", null, [_createTextVNode("foo")])]);"#,
+    Options {
+        custom_element_patterns: vec![crate::options::Regex::new("foo").unwrap()],
+        ..Default::default()
+    }
+);
