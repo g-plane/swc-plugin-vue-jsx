@@ -333,6 +333,34 @@ test!(
 );
 
 test!(
+    keep_alive_named_import,
+    r#"
+    import { KeepAlive } from 'vue';
+
+    <KeepAlive>123</KeepAlive>
+    "#,
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    import { KeepAlive } from 'vue';
+    _createVNode(KeepAlive, null, [_createTextVNode("123")]);
+    "#
+);
+
+test!(
+    keep_alive_namespace_import,
+    r#"
+    import * as Vue from 'vue';
+
+    <Vue.KeepAlive>123</Vue.KeepAlive>
+    "#,
+    r#"
+    import { createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    import * as Vue from 'vue';
+    _createVNode(Vue.KeepAlive, null, [_createTextVNode("123")]);
+    "#
+);
+
+test!(
     v_model_value_supports_variable,
     "
     const foo = 'foo';
