@@ -251,6 +251,22 @@ test!(
 );
 
 test!(
+    specifiers_merged_into_single_import_decl,
+    r#"
+    import { createVNode, Fragment as _Fragment } from 'vue';
+    import { vShow } from 'vue'
+
+    <_Fragment />
+    "#,
+    r#"
+    import { createVNode as _createVNode } from "vue";
+    import { createVNode, Fragment as _Fragment } from 'vue';
+    import { vShow } from 'vue';
+    _createVNode(_Fragment, null, null);
+    "#
+);
+
+test!(
     without_jsx,
     r#"
     import { createVNode } from 'vue';
