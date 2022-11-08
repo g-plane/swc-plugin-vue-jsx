@@ -7,7 +7,7 @@ use std::{
     mem,
 };
 use swc_core::{
-    common::{Mark, Spanned, DUMMY_SP},
+    common::{comments::Comments, Mark, Span, Spanned, DUMMY_SP},
     ecma::{
         ast::*,
         atoms::JsWord,
@@ -24,29 +24,43 @@ mod patch_flags;
 mod tests;
 mod util;
 
-const CREATE_VNODE: &str = "createVNode";
 const FRAGMENT: &str = "Fragment";
 const KEEP_ALIVE: &str = "KeepAlive";
 
-#[derive(Default)]
-pub struct VueJsxTransformVisitor {
+pub struct VueJsxTransformVisitor<C>
+where
+    C: Comments,
+{
     options: Options,
     vue_imports: BTreeMap<&'static str, Ident>,
     transform_on_helper: Option<Ident>,
-    unresolved_mark: Mark,
 
+    unresolved_mark: Mark,
+    comments: Option<C>,
+
+    pragma: Option<String>,
     slot_helper_ident: Option<Ident>,
     injecting_vars: Vec<VarDeclarator>,
     slot_counter: usize,
 }
 
-impl VueJsxTransformVisitor {
-    pub fn new(options: Options, unresolved_mark: Mark) -> Self {
+impl<C> VueJsxTransformVisitor<C>
+where
+    C: Comments,
+{
+    pub fn new(options: Options, unresolved_mark: Mark, comments: Option<C>) -> Self {
         Self {
-            unresolved_mark,
-            slot_counter: 1,
             options,
-            ..Default::default()
+            vue_imports: Default::default(),
+            transform_on_helper: None,
+
+            unresolved_mark,
+            comments,
+
+            pragma: None,
+            slot_helper_ident: None,
+            injecting_vars: Default::default(),
+            slot_counter: 1,
         }
     }
 
@@ -117,7 +131,7 @@ impl VueJsxTransformVisitor {
 
         let create_vnode_call = Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
+            callee: Callee::Expr(Box::new(Expr::Ident(self.get_pragma()))),
             args: vnode_call_args,
             type_args: None,
         });
@@ -188,7 +202,7 @@ impl VueJsxTransformVisitor {
     fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
         Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(self.import_from_vue(CREATE_VNODE)))),
+            callee: Callee::Expr(Box::new(Expr::Ident(self.get_pragma()))),
             args: vec![
                 ExprOrSpread {
                     spread: None,
@@ -881,10 +895,46 @@ impl VueJsxTransformVisitor {
                         || css_dataset::tags::SVG_TAGS.contains(name)))
         }
     }
+
+    fn get_pragma(&mut self) -> Ident {
+        self.pragma
+            .as_ref()
+            .or_else(|| self.options.pragma.as_ref())
+            .map(|name| quote_ident!(name.as_str()))
+            .unwrap_or_else(|| self.import_from_vue("createVNode"))
+    }
+
+    fn search_jsx_pragma(&mut self, span: Span) {
+        if let Some(comments) = &self.comments {
+            comments.with_leading(span.lo, |comments| {
+                let pragma = comments.iter().find_map(|comment| {
+                    let trimmed = comment.text.trim();
+                    trimmed
+                        .strip_prefix('*')
+                        .unwrap_or(trimmed)
+                        .trim()
+                        .strip_prefix("@jsx")
+                        .map(str::trim)
+                });
+                if let Some(pragma) = pragma {
+                    self.pragma = Some(pragma.to_string());
+                }
+            });
+        }
+    }
 }
 
-impl VisitMut for VueJsxTransformVisitor {
+impl<C> VisitMut for VueJsxTransformVisitor<C>
+where
+    C: Comments,
+{
     fn visit_mut_module(&mut self, module: &mut Module) {
+        self.search_jsx_pragma(module.span);
+        module
+            .body
+            .iter()
+            .for_each(|item| self.search_jsx_pragma(item.span()));
+
         module.visit_mut_children_with(self);
 
         if !self.injecting_vars.is_empty() {
@@ -990,5 +1040,6 @@ pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
     program.fold_with(&mut as_folder(VueJsxTransformVisitor::new(
         options,
         metadata.unresolved_mark,
+        metadata.comments,
     )))
 }

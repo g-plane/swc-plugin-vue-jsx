@@ -15,7 +15,7 @@ macro_rules! test {
                 jsx: true,
                 ..Default::default()
             }),
-            |_| {
+            |tester| {
                 let unresolved_mark = Mark::new();
                 chain!(
                     resolver(unresolved_mark, Mark::new(), false),
@@ -24,7 +24,8 @@ macro_rules! test {
                             optimize: true,
                             ..Default::default()
                         },
-                        unresolved_mark
+                        unresolved_mark,
+                        Some(tester.comments.clone())
                     ))
                 )
             },
@@ -39,11 +40,15 @@ macro_rules! test {
                 jsx: true,
                 ..Default::default()
             }),
-            |_| {
+            |tester| {
                 let unresolved_mark = Mark::new();
                 chain!(
                     resolver(unresolved_mark, Mark::new(), false),
-                    as_folder(VueJsxTransformVisitor::new($options, unresolved_mark))
+                    as_folder(VueJsxTransformVisitor::new(
+                        $options,
+                        unresolved_mark,
+                        Some(tester.comments.clone())
+                    ))
                 )
             },
             $name,
@@ -361,6 +366,18 @@ test!(
 );
 
 test!(
+    custom_pragma_in_comment,
+    r#"
+    /* @jsx custom */
+    <div id="custom">Hello</div>"#,
+    r#"
+    import { createTextVNode as _createTextVNode } from "vue";
+    /* @jsx custom */
+    custom("div", { "id": "custom" }, [_createTextVNode("Hello")]);
+    "#
+);
+
+test!(
     v_model_value_supports_variable,
     "
     const foo = 'foo';
@@ -454,6 +471,19 @@ test!(
     "#,
     Options {
         merge_props: false,
+        ..Default::default()
+    }
+);
+
+test!(
+    custom_pragma_in_options,
+    "<div>pragma</div>",
+    r#"
+    import { createTextVNode as _createTextVNode } from "vue";
+    custom("div", null, [_createTextVNode("pragma")]);
+    "#,
+    Options {
+        pragma: Some("custom".into()),
         ..Default::default()
     }
 );
