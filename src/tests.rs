@@ -476,6 +476,23 @@ test!(
 );
 
 test!(
+    disable_object_slot,
+    "<Badge>{slots.default()}</Badge>",
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("Badge"), null, {
+        default: () => [slots.default()],
+        // _: 1
+    });
+    "#,
+    Options {
+        optimize: true,
+        enable_object_slots: false,
+        ..Default::default()
+    }
+);
+
+test!(
     custom_pragma_in_options,
     "<div>pragma</div>",
     r#"
@@ -498,4 +515,20 @@ test!(
         custom_element_patterns: vec![crate::options::Regex::new("foo").unwrap()],
         ..Default::default()
     }
+);
+
+test!(
+    fragment_already_imported,
+    r#"
+    import { Fragment as _Fragment } from 'vue'
+    const Root1 = () => <>root1</>
+    const Root2 = () => <_Fragment>root2</_Fragment>
+    "#,
+    r#"
+    import { Fragment as _Fragment, createTextVNode as _createTextVNode, createVNode as _createVNode } from "vue";
+    import { Fragment as _Fragment1 } from 'vue';
+    const Root1 = () => _createVNode(_Fragment, null, [_createTextVNode("root1")]);
+    const Root2 = () => _createVNode(_Fragment1, null, [_createTextVNode("root2")]);
+    "#,
+    Options::default()
 );
