@@ -669,6 +669,8 @@ where
             .map(Some)
             .collect::<Vec<_>>();
 
+        let slot_flag = self.slot_flag_stack.pop().unwrap_or(SlotFlag::Stable);
+
         match elems.as_slice() {
             [] => Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
             [Some(ExprOrSpread { spread: None, expr })] => match &**expr {
@@ -688,10 +690,10 @@ where
                                 type_args: None,
                             })),
                             cons: Box::new(expr.clone()),
-                            alt: Box::new(self.wrap_children(elems)),
+                            alt: Box::new(self.wrap_children(elems, slot_flag)),
                         })
                     } else {
-                        self.wrap_children(elems)
+                        self.wrap_children(elems, slot_flag)
                     }
                 }
                 expr @ Expr::Call(..) if expr.span() != DUMMY_SP && is_component => {
@@ -719,13 +721,16 @@ where
                                 type_args: None,
                             })),
                             cons: Box::new(Expr::Ident(slot_ident.clone())),
-                            alt: Box::new(self.wrap_children(vec![Some(ExprOrSpread {
-                                spread: None,
-                                expr: Box::new(Expr::Ident(slot_ident)),
-                            })])),
+                            alt: Box::new(self.wrap_children(
+                                vec![Some(ExprOrSpread {
+                                    spread: None,
+                                    expr: Box::new(Expr::Ident(slot_ident)),
+                                })],
+                                slot_flag,
+                            )),
                         })
                     } else {
-                        self.wrap_children(elems)
+                        self.wrap_children(elems, slot_flag)
                     }
                 }
                 expr @ Expr::Fn(..) | expr @ Expr::Arrow(..) => Expr::Object(ObjectLit {
@@ -735,10 +740,26 @@ where
                         value: Box::new(expr.clone()),
                     })))],
                 }),
-                expr @ Expr::Object(..) => expr.clone(), // TODO: `optimize` option
+                Expr::Object(ObjectLit { props, .. }) => {
+                    let mut props = props.clone();
+                    if self.options.optimize {
+                        props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                            key: PropName::Ident(quote_ident!("_")),
+                            value: Box::new(Expr::Lit(Lit::Num(Number {
+                                span: DUMMY_SP,
+                                value: slot_flag as u8 as f64,
+                                raw: None,
+                            }))),
+                        }))));
+                    }
+                    Expr::Object(ObjectLit {
+                        span: DUMMY_SP,
+                        props,
+                    })
+                }
                 _ => {
                     if is_component {
-                        self.wrap_children(elems)
+                        self.wrap_children(elems, slot_flag)
                     } else {
                         Expr::Array(ArrayLit {
                             span: DUMMY_SP,
@@ -749,7 +770,7 @@ where
             },
             _ => {
                 if is_component {
-                    self.wrap_children(elems)
+                    self.wrap_children(elems, slot_flag)
                 } else {
                     Expr::Array(ArrayLit {
                         span: DUMMY_SP,
@@ -760,7 +781,7 @@ where
         }
     }
 
-    fn wrap_children(&mut self, elems: Vec<Option<ExprOrSpread>>) -> Expr {
+    fn wrap_children(&mut self, elems: Vec<Option<ExprOrSpread>>, slot_flag: SlotFlag) -> Expr {
         let mut props = vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: PropName::Ident(quote_ident!("default")),
             value: Box::new(Expr::Arrow(ArrowExpr {
@@ -777,7 +798,6 @@ where
             })),
         })))];
 
-        let slot_flag = self.slot_flag_stack.pop().unwrap_or(SlotFlag::Stable);
         if self.options.optimize {
             props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                 key: PropName::Ident(quote_ident!("_")),
