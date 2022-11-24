@@ -1,6 +1,7 @@
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use options::Options;
 use patch_flags::PatchFlags;
+use slot_flag::SlotFlag;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -20,6 +21,7 @@ use swc_core::{
 mod directive;
 mod options;
 mod patch_flags;
+mod slot_flag;
 #[cfg(test)]
 mod tests;
 mod util;
@@ -42,6 +44,7 @@ where
     slot_helper_ident: Option<Ident>,
     injecting_vars: Vec<VarDeclarator>,
     slot_counter: usize,
+    slot_flag_stack: Vec<SlotFlag>,
 }
 
 impl<C> VueJsxTransformVisitor<C>
@@ -61,6 +64,7 @@ where
             slot_helper_ident: None,
             injecting_vars: Default::default(),
             slot_counter: 1,
+            slot_flag_stack: Default::default(),
         }
     }
 
@@ -78,6 +82,8 @@ where
     }
 
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
+        self.slot_flag_stack.push(SlotFlag::Stable);
+
         let is_component = self.is_component(&jsx_element.opening.name);
         let mut directives = vec![];
         let (attributes, patch_flags, dynamic_props) =
@@ -200,6 +206,8 @@ where
     }
 
     fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
+        self.slot_flag_stack.push(SlotFlag::Stable);
+
         Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(self.get_pragma()))),
@@ -627,11 +635,23 @@ where
                 JSXElementChild::JSXExprContainer(JSXExprContainer {
                     expr: JSXExpr::Expr(expr),
                     ..
-                }) => Some(ExprOrSpread {
-                    spread: None,
-                    expr: expr.clone(),
-                }),
+                }) => {
+                    if let Expr::Ident(ident) = &**expr {
+                        if !ident.to_id().1.has_mark(self.unresolved_mark) {
+                            self.slot_flag_stack.fill(SlotFlag::Dynamic);
+                        }
+                    }
+                    Some(ExprOrSpread {
+                        spread: None,
+                        expr: expr.clone(),
+                    })
+                }
                 JSXElementChild::JSXSpreadChild(JSXSpreadChild { expr, .. }) => {
+                    if let Expr::Ident(ident) = &**expr {
+                        if !ident.to_id().1.has_mark(self.unresolved_mark) {
+                            self.slot_flag_stack.fill(SlotFlag::Dynamic);
+                        }
+                    }
                     Some(ExprOrSpread {
                         spread: Some(DUMMY_SP),
                         expr: expr.clone(),
@@ -740,24 +760,38 @@ where
         }
     }
 
-    fn wrap_children(&self, elems: Vec<Option<ExprOrSpread>>) -> Expr {
+    fn wrap_children(&mut self, elems: Vec<Option<ExprOrSpread>>) -> Expr {
+        let mut props = vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+            key: PropName::Ident(quote_ident!("default")),
+            value: Box::new(Expr::Arrow(ArrowExpr {
+                span: DUMMY_SP,
+                params: vec![],
+                body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+                    span: DUMMY_SP,
+                    elems,
+                }))),
+                is_async: false,
+                is_generator: false,
+                type_params: None,
+                return_type: None,
+            })),
+        })))];
+
+        let slot_flag = self.slot_flag_stack.pop().unwrap_or(SlotFlag::Stable);
+        if self.options.optimize {
+            props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: PropName::Ident(quote_ident!("_")),
+                value: Box::new(Expr::Lit(Lit::Num(Number {
+                    span: DUMMY_SP,
+                    value: slot_flag as u8 as f64,
+                    raw: None,
+                }))),
+            }))));
+        }
+
         Expr::Object(ObjectLit {
             span: DUMMY_SP,
-            props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: PropName::Ident(quote_ident!("default")),
-                value: Box::new(Expr::Arrow(ArrowExpr {
-                    span: DUMMY_SP,
-                    params: vec![],
-                    body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
-                        span: DUMMY_SP,
-                        elems,
-                    }))),
-                    is_async: false,
-                    is_generator: false,
-                    type_params: None,
-                    return_type: None,
-                })),
-            })))],
+            props,
         })
     }
 
