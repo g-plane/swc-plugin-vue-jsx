@@ -36,6 +36,7 @@ pub(crate) enum Directive {
     Text(Expr),
     Html(Expr),
     VModel(VModelDirective),
+    Slots(Option<Box<Expr>>),
 }
 
 pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directive {
@@ -53,6 +54,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
         "html" => return parse_v_html_directive(jsx_attr),
         "text" => return parse_v_text_directive(jsx_attr),
         "model" => return parse_v_model_directive(jsx_attr, is_component, argument, splitted),
+        "slots" => return parse_v_slots_directive(jsx_attr),
         _ => {}
     }
 
@@ -313,4 +315,18 @@ fn transform_modifiers(modifiers: BTreeSet<JsWord>, quote_prop: bool) -> Option<
                 .collect(),
         }))
     }
+}
+
+fn parse_v_slots_directive(jsx_attr: &JSXAttr) -> Directive {
+    let expr = match &jsx_attr.value {
+        Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
+            expr: JSXExpr::Expr(expr),
+            ..
+        })) => match &**expr {
+            Expr::Ident(..) | Expr::Object(..) => Some(expr.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+    Directive::Slots(expr)
 }

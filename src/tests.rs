@@ -441,6 +441,15 @@ test!(
 );
 
 test!(
+    v_slots,
+    "<A v-slots={slots} />",
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("A"), null, slots);
+    "#
+);
+
+test!(
     override_props_single,
     "<div {...a} />",
     r#"

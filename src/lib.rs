@@ -86,7 +86,7 @@ where
 
         let is_component = self.is_component(&jsx_element.opening.name);
         let mut directives = vec![];
-        let (attributes, patch_flags, dynamic_props) =
+        let (attributes, patch_flags, dynamic_props, slots) =
             self.transform_attrs(&jsx_element.opening.attrs, is_component, &mut directives);
         let mut vnode_call_args = vec![
             ExprOrSpread {
@@ -99,7 +99,7 @@ where
             },
             ExprOrSpread {
                 spread: None,
-                expr: Box::new(self.transform_children(&jsx_element.children, is_component)),
+                expr: Box::new(self.transform_children(&jsx_element.children, is_component, slots)),
             },
         ];
         if self.options.optimize {
@@ -222,7 +222,7 @@ where
                 },
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(self.transform_children(&jsx_fragment.children, false)),
+                    expr: Box::new(self.transform_children(&jsx_fragment.children, false, None)),
                 },
             ],
             type_args: None,
@@ -274,12 +274,20 @@ where
         attrs: &'a [JSXAttrOrSpread],
         is_component: bool,
         directives: &mut Vec<NormalDirective>,
-    ) -> (Expr, PatchFlags, Option<BTreeSet<Cow<'a, str>>>) {
+    ) -> (
+        Expr,
+        PatchFlags,
+        Option<BTreeSet<Cow<'a, str>>>,
+        Option<Box<Expr>>,
+    ) {
+        let mut slots = None;
+
         if attrs.is_empty() {
             return (
                 Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
                 PatchFlags::empty(),
                 None,
+                slots,
             );
         }
 
@@ -442,6 +450,7 @@ where
                                     },
                                 ))));
                             }
+                            Directive::Slots(expr) => slots = expr,
                         }
                     }
                     JSXAttrOrSpread::JSXAttr(jsx_attr) => {
@@ -615,10 +624,15 @@ where
             patch_flags.insert(PatchFlags::NEED_PATCH);
         }
 
-        (expr, patch_flags, Some(dynamic_props))
+        (expr, patch_flags, Some(dynamic_props), slots)
     }
 
-    fn transform_children(&mut self, children: &[JSXElementChild], is_component: bool) -> Expr {
+    fn transform_children(
+        &mut self,
+        children: &[JSXElementChild],
+        is_component: bool,
+        slots: Option<Box<Expr>>,
+    ) -> Expr {
         let elems = children
             .iter()
             .filter_map(|child| match child {
@@ -672,7 +686,13 @@ where
         let slot_flag = self.slot_flag_stack.pop().unwrap_or(SlotFlag::Stable);
 
         match elems.as_slice() {
-            [] => Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
+            [] => {
+                if let Some(slots) = slots {
+                    *slots
+                } else {
+                    Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+                }
+            }
             [Some(ExprOrSpread { spread: None, expr })] => match &**expr {
                 expr @ Expr::Ident(..) if is_component => {
                     if self.options.enable_object_slots {
@@ -690,10 +710,10 @@ where
                                 type_args: None,
                             })),
                             cons: Box::new(expr.clone()),
-                            alt: Box::new(self.wrap_children(elems, slot_flag)),
+                            alt: Box::new(self.wrap_children(elems, slot_flag, slots)),
                         })
                     } else {
-                        self.wrap_children(elems, slot_flag)
+                        self.wrap_children(elems, slot_flag, slots)
                     }
                 }
                 expr @ Expr::Call(..) if expr.span() != DUMMY_SP && is_component => {
@@ -727,10 +747,11 @@ where
                                     expr: Box::new(Expr::Ident(slot_ident)),
                                 })],
                                 slot_flag,
+                                slots,
                             )),
                         })
                     } else {
-                        self.wrap_children(elems, slot_flag)
+                        self.wrap_children(elems, slot_flag, slots)
                     }
                 }
                 expr @ Expr::Fn(..) | expr @ Expr::Arrow(..) => Expr::Object(ObjectLit {
@@ -759,7 +780,7 @@ where
                 }
                 _ => {
                     if is_component {
-                        self.wrap_children(elems, slot_flag)
+                        self.wrap_children(elems, slot_flag, slots)
                     } else {
                         Expr::Array(ArrayLit {
                             span: DUMMY_SP,
@@ -770,7 +791,7 @@ where
             },
             _ => {
                 if is_component {
-                    self.wrap_children(elems, slot_flag)
+                    self.wrap_children(elems, slot_flag, None)
                 } else {
                     Expr::Array(ArrayLit {
                         span: DUMMY_SP,
@@ -781,7 +802,12 @@ where
         }
     }
 
-    fn wrap_children(&mut self, elems: Vec<Option<ExprOrSpread>>, slot_flag: SlotFlag) -> Expr {
+    fn wrap_children(
+        &mut self,
+        elems: Vec<Option<ExprOrSpread>>,
+        slot_flag: SlotFlag,
+        slots: Option<Box<Expr>>,
+    ) -> Expr {
         let mut props = vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: PropName::Ident(quote_ident!("default")),
             value: Box::new(Expr::Arrow(ArrowExpr {
@@ -797,6 +823,18 @@ where
                 return_type: None,
             })),
         })))];
+
+        if let Some(expr) = slots {
+            match *expr {
+                Expr::Object(ObjectLit {
+                    props: slot_props, ..
+                }) => props.extend_from_slice(&slot_props),
+                _ => props.push(PropOrSpread::Spread(SpreadElement {
+                    dot3_token: DUMMY_SP,
+                    expr,
+                })),
+            }
+        }
 
         if self.options.optimize {
             props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
