@@ -476,13 +476,71 @@ test!(
 );
 
 test!(
+    multiple_exprs_slot,
+    "<A>{foo}{bar}</A>",
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("A"), null, {
+        default: () => [foo, bar],
+        _: 1
+    });
+    "#,
+    Options {
+        optimize: true,
+        enable_object_slots: true,
+        ..Default::default()
+    }
+);
+
+test!(
+    function_expr_slot,
+    r#"<A>{() => "foo"}</A>"#,
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("A"), null, {
+        default: () => "foo"
+    });
+    "#,
+    Options {
+        optimize: true,
+        enable_object_slots: true,
+        ..Default::default()
+    }
+);
+
+test!(
+    non_literal_expr_slot,
+    r#"
+    const foo = () => 1;
+    <A>{foo()}</A>;
+    "#,
+    r#"
+    import { createVNode as _createVNode, isVNode as _isVNode, resolveComponent as _resolveComponent } from "vue";
+    function _isSlot(s) {
+        return typeof s === "function" || ({}).toString.call(s) === "[object Object]" && !_isVNode(s);
+    }
+    let _slot;
+    const foo = () => 1;
+    _createVNode(_resolveComponent("A"), null, _isSlot(_slot = foo()) ? _slot : {
+        default: () => [_slot],
+        _: 1
+    });
+    "#,
+    Options {
+        optimize: true,
+        enable_object_slots: true,
+        ..Default::default()
+    }
+);
+
+test!(
     disable_object_slot,
     "<Badge>{slots.default()}</Badge>",
     r#"
     import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
     _createVNode(_resolveComponent("Badge"), null, {
         default: () => [slots.default()],
-        // _: 1
+        _: 1
     });
     "#,
     Options {
