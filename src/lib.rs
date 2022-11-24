@@ -799,7 +799,7 @@ where
             },
             _ => {
                 if is_component {
-                    self.wrap_children(elems, slot_flag, None)
+                    self.wrap_children(elems, slot_flag, slots)
                 } else {
                     Expr::Array(ArrayLit {
                         span: DUMMY_SP,
