@@ -235,6 +235,18 @@ test!(
 );
 
 test!(
+    merge_class_style_attrs,
+    r#"<div class="a" class={b} style="color: red" style={s}></div>"#,
+    r#"
+    import { createVNode as _createVNode } from "vue";
+    _createVNode("div", {
+        "class": ["a", b],
+        "style": ["color: red", s]
+    }, null, 6);
+    "#
+);
+
+test!(
     single_attr,
     "<div {...x}>single</div>",
     r#"

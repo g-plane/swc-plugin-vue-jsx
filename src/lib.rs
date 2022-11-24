@@ -545,7 +545,7 @@ where
                         if !props.is_empty() && self.options.merge_props {
                             merge_args.push(Expr::Object(ObjectLit {
                                 span: DUMMY_SP,
-                                props: mem::take(&mut props),
+                                props: util::dedupe_props(mem::take(&mut props)),
                             }));
                         }
 
@@ -570,7 +570,11 @@ where
             if !props.is_empty() {
                 merge_args.push(Expr::Object(ObjectLit {
                     span: DUMMY_SP,
-                    props: mem::take(&mut props),
+                    props: if self.options.merge_props {
+                        util::dedupe_props(mem::take(&mut props))
+                    } else {
+                        mem::take(&mut props)
+                    },
                 }));
             }
             match merge_args.as_slice() {
@@ -594,7 +598,11 @@ where
             } else {
                 Expr::Object(ObjectLit {
                     span: DUMMY_SP,
-                    props,
+                    props: if self.options.merge_props {
+                        util::dedupe_props(props)
+                    } else {
+                        props
+                    },
                 })
             }
         } else {

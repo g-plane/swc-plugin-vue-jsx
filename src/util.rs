@@ -133,3 +133,83 @@ pub(crate) fn is_on(attr_name: &str) -> bool {
         _ => false,
     }
 }
+
+pub(crate) fn dedupe_props(props: Vec<PropOrSpread>) -> Vec<PropOrSpread> {
+    let capacity = props.len();
+    props.into_iter().fold(
+        Vec::with_capacity(capacity),
+        |mut defined, prop_or_spread| {
+            if let PropOrSpread::Prop(prop) = prop_or_spread {
+                if let Prop::KeyValue(KeyValueProp {
+                    key:
+                        PropName::Str(Str {
+                            value: ref name,
+                            raw,
+                            span,
+                        }),
+                    value,
+                }) = *prop
+                {
+                    match defined.iter_mut().find_map(|item| match item {
+                        PropOrSpread::Prop(prop) => match &mut **prop {
+                            Prop::KeyValue(KeyValueProp {
+                                key:
+                                    PropName::Str(Str {
+                                        value: defined_name,
+                                        ..
+                                    }),
+                                value,
+                                ..
+                            }) if defined_name == name => Some(value),
+                            _ => None,
+                        },
+                        _ => None,
+                    }) {
+                        Some(defined_value)
+                            if name == "class" || name == "style" || name.starts_with("on") =>
+                        {
+                            if let Expr::Array(ArrayLit { elems, .. }) = &mut **defined_value {
+                                elems.push(Some(ExprOrSpread {
+                                    spread: None,
+                                    expr: value,
+                                }));
+                            } else {
+                                *defined_value = Box::new(Expr::Array(ArrayLit {
+                                    span: DUMMY_SP,
+                                    elems: vec![
+                                        Some(ExprOrSpread {
+                                            spread: None,
+                                            expr: defined_value.clone(),
+                                        }),
+                                        Some(ExprOrSpread {
+                                            spread: None,
+                                            expr: value,
+                                        }),
+                                    ],
+                                }));
+                            }
+                        }
+                        Some(..) => {}
+                        None => {
+                            defined.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
+                                KeyValueProp {
+                                    key: PropName::Str(Str {
+                                        span,
+                                        value: name.clone(),
+                                        raw,
+                                    }),
+                                    value,
+                                },
+                            ))));
+                        }
+                    }
+                } else {
+                    defined.push(PropOrSpread::Prop(prop));
+                }
+            } else {
+                defined.push(prop_or_spread);
+            }
+            defined
+        },
+    )
+}
