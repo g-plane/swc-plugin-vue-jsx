@@ -45,6 +45,9 @@ where
     injecting_vars: Vec<VarDeclarator>,
     slot_counter: usize,
     slot_flag_stack: Vec<SlotFlag>,
+
+    assignment_left: Option<Ident>,
+    injecting_consts: Vec<VarDeclarator>,
 }
 
 impl<C> VueJsxTransformVisitor<C>
@@ -65,6 +68,9 @@ where
             injecting_vars: Default::default(),
             slot_counter: 1,
             slot_flag_stack: Default::default(),
+
+            assignment_left: None,
+            injecting_consts: Default::default(),
         }
     }
 
@@ -703,6 +709,7 @@ where
             }
             [Some(ExprOrSpread { spread: None, expr })] => match &**expr {
                 expr @ Expr::Ident(..) if is_component => {
+                    let elems = self.build_iife(elems.clone());
                     if self.options.enable_object_slots {
                         Expr::Cond(CondExpr {
                             span: DUMMY_SP,
@@ -749,14 +756,13 @@ where
                                 type_args: None,
                             })),
                             cons: Box::new(Expr::Ident(slot_ident.clone())),
-                            alt: Box::new(self.wrap_children(
-                                vec![Some(ExprOrSpread {
+                            alt: {
+                                let elems = self.build_iife(vec![Some(ExprOrSpread {
                                     spread: None,
                                     expr: Box::new(Expr::Ident(slot_ident)),
-                                })],
-                                slot_flag,
-                                slots,
-                            )),
+                                })]);
+                                Box::new(self.wrap_children(elems, slot_flag, slots))
+                            },
                         })
                     } else {
                         self.wrap_children(elems, slot_flag, slots)
@@ -1022,6 +1028,65 @@ where
             });
         }
     }
+
+    fn build_iife(&mut self, elems: Vec<Option<ExprOrSpread>>) -> Vec<Option<ExprOrSpread>> {
+        let left = self.assignment_left.take();
+        if let Some(left) = left {
+            elems
+                .into_iter()
+                .map(|elem| match elem {
+                    Some(ExprOrSpread { spread: None, expr }) => match *expr {
+                        Expr::Ident(ident) if ident.sym == left.sym => {
+                            let name = private_ident!(format!("_{}", ident.sym));
+                            self.injecting_consts.push(VarDeclarator {
+                                span: DUMMY_SP,
+                                name: Pat::Ident(BindingIdent {
+                                    id: name.clone(),
+                                    type_ann: None,
+                                }),
+                                init: Some(Box::new(Expr::Call(CallExpr {
+                                    span: DUMMY_SP,
+                                    callee: Callee::Expr(Box::new(Expr::Fn(FnExpr {
+                                        ident: None,
+                                        function: Box::new(Function {
+                                            params: vec![],
+                                            decorators: vec![],
+                                            span: DUMMY_SP,
+                                            body: Some(BlockStmt {
+                                                span: DUMMY_SP,
+                                                stmts: vec![Stmt::Return(ReturnStmt {
+                                                    span: DUMMY_SP,
+                                                    arg: Some(Box::new(Expr::Ident(ident))),
+                                                })],
+                                            }),
+                                            is_generator: false,
+                                            is_async: false,
+                                            type_params: None,
+                                            return_type: None,
+                                        }),
+                                    }))),
+                                    args: vec![],
+                                    type_args: None,
+                                }))),
+                                definite: false,
+                            });
+                            Some(ExprOrSpread {
+                                spread: None,
+                                expr: Box::new(Expr::Ident(name)),
+                            })
+                        }
+                        expr => Some(ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(expr),
+                        }),
+                    },
+                    _ => elem,
+                })
+                .collect()
+        } else {
+            elems
+        }
+    }
 }
 
 impl<C> VisitMut for VueJsxTransformVisitor<C>
@@ -1036,6 +1101,18 @@ where
             .for_each(|item| self.search_jsx_pragma(item.span()));
 
         module.visit_mut_children_with(self);
+
+        if !self.injecting_consts.is_empty() {
+            module.body.insert(
+                0,
+                ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                    span: DUMMY_SP,
+                    kind: VarDeclKind::Const,
+                    declare: false,
+                    decls: mem::take(&mut self.injecting_consts),
+                })))),
+            );
+        }
 
         if !self.injecting_vars.is_empty() {
             module.body.insert(
@@ -1104,6 +1181,18 @@ where
     fn visit_mut_stmts(&mut self, stmts: &mut Vec<Stmt>) {
         stmts.visit_mut_children_with(self);
 
+        if !self.injecting_consts.is_empty() {
+            stmts.insert(
+                0,
+                Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                    span: DUMMY_SP,
+                    kind: VarDeclKind::Const,
+                    declare: false,
+                    decls: mem::take(&mut self.injecting_consts),
+                }))),
+            );
+        }
+
         if !self.injecting_vars.is_empty() {
             stmts.insert(
                 0,
@@ -1122,6 +1211,14 @@ where
         match expr {
             Expr::JSXElement(jsx_element) => *expr = self.transform_jsx_element(jsx_element),
             Expr::JSXFragment(jsx_fragment) => *expr = self.transform_jsx_fragment(jsx_fragment),
+            Expr::Assign(AssignExpr {
+                left: PatOrExpr::Pat(pat),
+                ..
+            }) => {
+                if let Pat::Ident(binding_ident) = &**pat {
+                    self.assignment_left = Some(binding_ident.id.clone());
+                }
+            }
             _ => {}
         }
 
