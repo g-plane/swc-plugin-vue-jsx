@@ -811,7 +811,7 @@ where
     }
 
     fn wrap_children(
-        &mut self,
+        &self,
         elems: Vec<Option<ExprOrSpread>>,
         slot_flag: SlotFlag,
         slots: Option<Box<Expr>>,
