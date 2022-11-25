@@ -11,6 +11,26 @@ npm i -D swc-plugin-vue-jsx
 
 ## Configuration
 
+You can configure your `.swcrc` file.
+
+### Minimum Config
+
+```json
+{
+  "jsc": {
+    "parser": {
+      "syntax": "ecmascript",
+      "jsx": true
+    },
+    "experimental": {
+      "plugins": [["swc-plugin-vue-jsx", {}]]
+    }
+  }
+}
+```
+
+### Options
+
 These options of official Babel plugin are supported:
 
 - `transformOn`
@@ -38,6 +58,30 @@ For example:
 ```
 
 All HTML tags which match the pattern `^i-` will be treated as custom elements.
+
+### Advanced Config Example
+
+```json
+{
+  "jsc": {
+    "parser": {
+      "syntax": "ecmascript",
+      "jsx": true
+    },
+    "experimental": {
+      "plugins": [
+        [
+          "swc-plugin-vue-jsx",
+          {
+            "transformOn": true,
+            "optimize": true
+          }
+        ]
+      ]
+    }
+  }
+}
+```
 
 ## Limitation
 
