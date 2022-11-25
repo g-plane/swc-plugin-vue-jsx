@@ -8,8 +8,11 @@
   "keywords": [
     "swc-plugin"
   ],
+  "files": [
+    "target/wasm32-unknown-unknown/release/swc-plugin-vue-jsx.wasm"
+  ],
   "main": "target/wasm32-unknown-unknown/release/swc-plugin-vue-jsx.wasm",
   "scripts": {
-    "prepublishOnly": "cargo build-wasm32 --release"
+    "prepublishOnly": "cargo build --target wasm32-unknown-unknown --release"
   }
 }
