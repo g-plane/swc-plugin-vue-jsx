@@ -9,10 +9,10 @@
     "swc-plugin"
   ],
   "files": [
-    "target/wasm32-unknown-unknown/release/swc-plugin-vue-jsx.wasm"
+    "swc_plugin_vue_jsx.wasm"
   ],
-  "main": "target/wasm32-unknown-unknown/release/swc-plugin-vue-jsx.wasm",
+  "main": "swc_plugin_vue_jsx.wasm",
   "scripts": {
-    "prepublishOnly": "cargo build --target wasm32-unknown-unknown --release"
+    "prepublishOnly": "cargo build --target wasm32-unknown-unknown --release && cp target/wasm32-unknown-unknown/release/swc_plugin_vue_jsx.wasm ."
   }
 }
