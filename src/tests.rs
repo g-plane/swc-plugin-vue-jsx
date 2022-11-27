@@ -149,7 +149,7 @@ test!(
     _withDirectives(_createVNode("input", {
         "type": type,
         "onUpdate:modelValue": $event => test = $event
-    }, null, 8, ["onUpdate:modelValue", "type"]), [[_vModelDynamic, test]]);"#
+    }, null, 8, ["type", "onUpdate:modelValue"]), [[_vModelDynamic, test]]);"#
 );
 
 test!(
@@ -380,6 +380,27 @@ test!(
             b: true
         }]]),
     ]);
+"#
+);
+
+test!(
+    v_models,
+    r#"<C v-models={[[foo, ["modifier"]], [bar, "bar", ["modifier1", "modifier2"]]]} />"#,
+    r#"
+    import { createVNode as _createVNode, resolveComponent as _resolveComponent } from "vue";
+    _createVNode(_resolveComponent("C"), {
+        "modelValue": foo,
+        "modelModifiers": {
+            "modifier": true
+        },
+        "onUpdate:modelValue": $event => foo = $event,
+        "bar": bar,
+        "barModifiers": {
+            "modifier1": true,
+            "modifier2": true
+        },
+        "onUpdate:bar": $event => bar = $event
+    }, null, 8, ["modelValue", "onUpdate:modelValue", "bar", "onUpdate:bar"]);
 "#
 );
 

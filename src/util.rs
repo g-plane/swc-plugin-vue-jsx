@@ -213,3 +213,53 @@ pub(crate) fn dedupe_props(props: Vec<PropOrSpread>) -> Vec<PropOrSpread> {
         },
     )
 }
+
+pub(crate) fn decouple_v_models(
+    elems: Vec<Option<ExprOrSpread>>,
+) -> impl Iterator<Item = JSXAttrOrSpread> {
+    elems
+        .into_iter()
+        .filter_map(|elem| match elem {
+            Some(ExprOrSpread { spread: None, expr }) => expr.array(),
+            _ => None,
+        })
+        .map(|ArrayLit { mut elems, .. }| {
+            let argument = elems
+                .get(1)
+                .and_then(|elem| {
+                    if let Some(ExprOrSpread { spread: None, expr }) = elem {
+                        expr.as_lit()
+                    } else {
+                        None
+                    }
+                })
+                .and_then(|lit| {
+                    if let Lit::Str(Str { value, .. }) = lit {
+                        Some(value.clone())
+                    } else {
+                        None
+                    }
+                });
+            if argument.is_some() {
+                elems.remove(1);
+            }
+            JSXAttrOrSpread::JSXAttr(JSXAttr {
+                span: DUMMY_SP,
+                name: if let Some(argument) = argument {
+                    JSXAttrName::JSXNamespacedName(JSXNamespacedName {
+                        ns: quote_ident!("v-model"),
+                        name: quote_ident!(argument),
+                    })
+                } else {
+                    JSXAttrName::Ident(quote_ident!("v-model"))
+                },
+                value: Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
+                    span: DUMMY_SP,
+                    expr: JSXExpr::Expr(Box::new(Expr::Array(ArrayLit {
+                        span: DUMMY_SP,
+                        elems,
+                    }))),
+                })),
+            })
+        })
+}

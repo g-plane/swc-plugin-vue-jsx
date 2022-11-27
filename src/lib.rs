@@ -1,12 +1,9 @@
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
+use indexmap::IndexSet;
 use options::Options;
 use patch_flags::PatchFlags;
 use slot_flag::SlotFlag;
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
-    mem,
-};
+use std::{borrow::Cow, collections::BTreeMap, mem};
 use swc_core::{
     common::{comments::Comments, Mark, Span, Spanned, DUMMY_SP},
     ecma::{
@@ -15,7 +12,7 @@ use swc_core::{
         utils::{private_ident, quote_ident, quote_str},
         visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
     },
-    plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
+    plugin::{errors::HANDLER, plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 
 mod directive;
@@ -283,7 +280,7 @@ where
     ) -> (
         Expr,
         PatchFlags,
-        Option<BTreeSet<Cow<'a, str>>>,
+        Option<IndexSet<Cow<'a, str>>>,
         Option<Box<Expr>>,
     ) {
         let mut slots = None;
@@ -297,7 +294,7 @@ where
             );
         }
 
-        let mut dynamic_props = BTreeSet::new();
+        let mut dynamic_props = IndexSet::new();
 
         // patch flags analysis
         let mut has_ref = false;
@@ -1208,6 +1205,8 @@ where
     }
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
+        expr.visit_mut_children_with(self);
+
         match expr {
             Expr::JSXElement(jsx_element) => *expr = self.transform_jsx_element(jsx_element),
             Expr::JSXFragment(jsx_fragment) => *expr = self.transform_jsx_fragment(jsx_fragment),
@@ -1221,8 +1220,46 @@ where
             }
             _ => {}
         }
+    }
 
-        expr.visit_mut_children_with(self);
+    // decouple `v-models`
+    fn visit_mut_jsx_opening_element(&mut self, jsx_opening_element: &mut JSXOpeningElement) {
+        jsx_opening_element.visit_mut_children_with(self);
+
+        let Some(index) =
+            jsx_opening_element
+                .attrs
+                .iter()
+                .enumerate()
+                .find_map(|(i, jsx_attr_or_spread)| match jsx_attr_or_spread {
+                    JSXAttrOrSpread::JSXAttr(JSXAttr {
+                        name: JSXAttrName::Ident(Ident { sym, .. }),
+                        ..
+                    }) if sym == "v-models" => Some(i),
+                    _ => None,
+                }) else {
+                    return;
+                };
+
+        let JSXAttrOrSpread::JSXAttr(JSXAttr { value, .. }) = jsx_opening_element.attrs.remove(index) else {
+            unreachable!()
+        };
+
+        let Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
+            expr: JSXExpr::Expr(expr),
+            ..
+        })) = value else {
+            HANDLER.with(|handler| handler.span_err(value.span(), "you should pass a Two-dimensional Arrays to v-models"));
+            return;
+        };
+        let Expr::Array(ArrayLit { elems, .. }) = *expr else {
+            HANDLER.with(|handler| handler.span_err(expr.span(), "you should pass a Two-dimensional Arrays to v-models"));
+            return;
+        };
+
+        jsx_opening_element
+            .attrs
+            .splice(index..index, util::decouple_v_models(elems));
     }
 }
 

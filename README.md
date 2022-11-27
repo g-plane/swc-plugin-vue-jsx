@@ -83,13 +83,6 @@ All HTML tags which match the pattern `^i-` will be treated as custom elements.
 }
 ```
 
-## Limitation
-
-`v-models` isn't supported.
-We don't have plans on it, since it's not recommended as official documentation mentioned.
-
-You can decouple your `v-models` into different `v-model` directives.
-
 ## License
 
 MIT License

@@ -1287,6 +1287,7 @@ version = "0.1.1"
 dependencies = [
  "bitflags",
  "css_dataset",
+ "indexmap",
  "regex",
  "serde",
  "serde_json",
