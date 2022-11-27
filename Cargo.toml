@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 
 [profile.release]
 lto = true
+opt-level = "s"
+strip = "symbols"
 
 [dependencies]
 bitflags = "1.3"
