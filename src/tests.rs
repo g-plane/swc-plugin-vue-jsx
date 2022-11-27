@@ -58,6 +58,8 @@ macro_rules! test {
     };
 }
 
+// ====== official snapshot tests
+
 test!(
     v_model_with_checkbox,
     r#"<input type="checkbox" v-model={test} />"#,
@@ -653,4 +655,89 @@ test!(
     const Root2 = () => _createVNode(_Fragment1, null, [_createTextVNode("root2")]);
     "#,
     Options::default()
+);
+
+// ======
+
+// ====== extra custom tests
+
+test!(
+    v_slots_complex,
+    "
+    <div>
+        <Comp v-slots={slots}>content</Comp>
+        <Comp v-slots={{ a: b }}>content</Comp>
+    </div>
+",
+    r#"
+    import {
+        createTextVNode as _createTextVNode,
+        createVNode as _createVNode,
+        resolveComponent as _resolveComponent,
+    } from "vue";
+    _createVNode("div", null, [
+        _createVNode(_resolveComponent("Comp"), null, {
+            default: () => [_createTextVNode("content")],
+            ...slots,
+            _: 1,
+        }),
+        _createVNode(_resolveComponent("Comp"), null, {
+            default: () => [_createTextVNode("content")],
+            a: b,
+            _: 1,
+        }),
+    ]);
+    "#
+);
+
+test!(
+    nesting_slot_flags,
+    "
+    let defined;
+
+    <Comp>
+        {unknown1}
+        <Comp>
+            {unknown2}
+            <Comp>
+                {unknown3}
+                <Comp>{defined}</Comp>
+            </Comp>
+        </Comp>
+        <Comp>
+            {unknown4}
+            <Comp>{unknown5}</Comp>
+        </Comp>
+    </Comp>
+",
+    r#"
+    import { createVNode as _createVNode, isVNode as _isVNode, resolveComponent as _resolveComponent } from "vue";
+    function _isSlot(s) {
+        return typeof s === "function" || ({}).toString.call(s) === "[object Object]" && !_isVNode(s);
+    }
+    let defined;
+    _createVNode(_resolveComponent("Comp"), null, {
+        default: () => [
+            unknown1,
+            _createVNode(_resolveComponent("Comp"), null, {
+                default: () => [unknown2, _createVNode(_resolveComponent("Comp"), null, {
+                    default: () => [unknown3, _createVNode(_resolveComponent("Comp"), null, _isSlot(defined) ? defined : {
+                        default: () => [defined],
+                        _: 2
+                    })],
+                    _: 2
+                })],
+                _: 2
+            }),
+            _createVNode(_resolveComponent("Comp"), null, {
+                default: () => [unknown4, _createVNode(_resolveComponent("Comp"), null, _isSlot(unknown5) ? unknown5 : {
+                    default: () => [unknown5],
+                    _: 1
+                })],
+                _: 1
+            }),
+        ],
+        _: 2
+    });
+    "#
 );
