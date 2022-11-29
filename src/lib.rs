@@ -26,6 +26,13 @@ mod util;
 const FRAGMENT: &str = "Fragment";
 const KEEP_ALIVE: &str = "KeepAlive";
 
+struct AttrsTransformationResult<'a> {
+    attrs: Expr,
+    patch_flags: PatchFlags,
+    dynamic_props: Option<IndexSet<Cow<'a, str>>>,
+    slots: Option<Box<Expr>>,
+}
+
 pub struct VueJsxTransformVisitor<C>
 where
     C: Comments,
@@ -89,8 +96,12 @@ where
 
         let is_component = self.is_component(&jsx_element.opening.name);
         let mut directives = vec![];
-        let (attributes, patch_flags, dynamic_props, slots) =
-            self.transform_attrs(&jsx_element.opening.attrs, is_component, &mut directives);
+        let AttrsTransformationResult {
+            attrs,
+            patch_flags,
+            dynamic_props,
+            slots,
+        } = self.transform_attrs(&jsx_element.opening.attrs, is_component, &mut directives);
         let mut vnode_call_args = vec![
             ExprOrSpread {
                 spread: None,
@@ -98,7 +109,7 @@ where
             },
             ExprOrSpread {
                 spread: None,
-                expr: Box::new(attributes),
+                expr: Box::new(attrs),
             },
             ExprOrSpread {
                 spread: None,
@@ -277,21 +288,16 @@ where
         attrs: &'a [JSXAttrOrSpread],
         is_component: bool,
         directives: &mut Vec<NormalDirective>,
-    ) -> (
-        Expr,
-        PatchFlags,
-        Option<IndexSet<Cow<'a, str>>>,
-        Option<Box<Expr>>,
-    ) {
+    ) -> AttrsTransformationResult<'a> {
         let mut slots = None;
 
         if attrs.is_empty() {
-            return (
-                Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
-                PatchFlags::empty(),
-                None,
+            return AttrsTransformationResult {
+                attrs: Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
+                patch_flags: PatchFlags::empty(),
+                dynamic_props: None,
                 slots,
-            );
+            };
         }
 
         let mut dynamic_props = IndexSet::new();
@@ -635,7 +641,12 @@ where
             patch_flags.insert(PatchFlags::NEED_PATCH);
         }
 
-        (expr, patch_flags, Some(dynamic_props), slots)
+        AttrsTransformationResult {
+            attrs: expr,
+            patch_flags,
+            dynamic_props: Some(dynamic_props),
+            slots,
+        }
     }
 
     fn transform_children(
