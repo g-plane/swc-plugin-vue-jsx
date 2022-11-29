@@ -99,7 +99,7 @@ pub(crate) fn is_jsx_attr_value_constant(value: &JSXAttrValue) -> bool {
         JSXAttrValue::JSXExprContainer(JSXExprContainer {
             expr: JSXExpr::Expr(expr),
             ..
-        }) => is_constant(&expr),
+        }) => is_constant(expr),
         _ => false,
     }
 }
@@ -114,7 +114,7 @@ fn is_constant(expr: &Expr) -> bool {
         Expr::Object(ObjectLit { props, .. }) => props.iter().all(|prop| {
             if let PropOrSpread::Prop(prop) = prop {
                 match &**prop {
-                    Prop::KeyValue(KeyValueProp { value, .. }) => is_constant(&value),
+                    Prop::KeyValue(KeyValueProp { value, .. }) => is_constant(value),
                     Prop::Shorthand(ident) => &ident.sym == "undefined",
                     _ => false,
                 }

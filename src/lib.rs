@@ -1,3 +1,5 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use indexmap::IndexSet;
 use options::Options;
@@ -1013,7 +1015,7 @@ where
     fn get_pragma(&mut self) -> Ident {
         self.pragma
             .as_ref()
-            .or_else(|| self.options.pragma.as_ref())
+            .or(self.options.pragma.as_ref())
             .map(|name| quote_ident!(name.as_str()))
             .unwrap_or_else(|| self.import_from_vue("createVNode"))
     }
