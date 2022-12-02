@@ -94,7 +94,9 @@ where
     }
 
     fn transform_jsx_element(&mut self, jsx_element: &JSXElement) -> Expr {
-        self.slot_flag_stack.push(SlotFlag::Stable);
+        if self.options.optimize {
+            self.slot_flag_stack.push(SlotFlag::Stable);
+        }
 
         let is_component = self.is_component(&jsx_element.opening.name);
         let mut directives = vec![];
@@ -222,7 +224,9 @@ where
     }
 
     fn transform_jsx_fragment(&mut self, jsx_fragment: &JSXFragment) -> Expr {
-        self.slot_flag_stack.push(SlotFlag::Stable);
+        if self.options.optimize {
+            self.slot_flag_stack.push(SlotFlag::Stable);
+        }
 
         Expr::Call(CallExpr {
             span: DUMMY_SP,
@@ -674,9 +678,14 @@ where
                     expr: JSXExpr::Expr(expr),
                     ..
                 }) => {
-                    if let Expr::Ident(ident) = &**expr {
-                        if !ident.to_id().1.has_mark(self.unresolved_mark) {
-                            self.slot_flag_stack.fill(SlotFlag::Dynamic);
+                    if self.options.optimize {
+                        match &**expr {
+                            Expr::Ident(ident)
+                                if !ident.to_id().1.has_mark(self.unresolved_mark) =>
+                            {
+                                self.slot_flag_stack.fill(SlotFlag::Dynamic);
+                            }
+                            _ => {}
                         }
                     }
                     Some(ExprOrSpread {
@@ -685,9 +694,14 @@ where
                     })
                 }
                 JSXElementChild::JSXSpreadChild(JSXSpreadChild { expr, .. }) => {
-                    if let Expr::Ident(ident) = &**expr {
-                        if !ident.to_id().1.has_mark(self.unresolved_mark) {
-                            self.slot_flag_stack.fill(SlotFlag::Dynamic);
+                    if self.options.optimize {
+                        match &**expr {
+                            Expr::Ident(ident)
+                                if !ident.to_id().1.has_mark(self.unresolved_mark) =>
+                            {
+                                self.slot_flag_stack.fill(SlotFlag::Dynamic);
+                            }
+                            _ => {}
                         }
                     }
                     Some(ExprOrSpread {
@@ -707,7 +721,11 @@ where
             .map(Some)
             .collect::<Vec<_>>();
 
-        let slot_flag = self.slot_flag_stack.pop().unwrap_or(SlotFlag::Stable);
+        let slot_flag = if self.options.optimize {
+            self.slot_flag_stack.pop().unwrap_or(SlotFlag::Stable)
+        } else {
+            SlotFlag::Stable
+        };
 
         match elems.as_slice() {
             [] => {
