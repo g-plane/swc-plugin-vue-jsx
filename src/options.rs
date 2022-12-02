@@ -6,7 +6,6 @@ use std::{fmt, ops::Deref};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", default)]
-#[allow(unused)]
 pub struct Options {
     pub transform_on: bool,
 
