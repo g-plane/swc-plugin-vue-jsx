@@ -1,8 +1,6 @@
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
-
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use indexmap::IndexSet;
-use options::Options;
+pub use options::{Options, Regex};
 use patch_flags::PatchFlags;
 use slot_flag::SlotFlag;
 use std::{borrow::Cow, collections::BTreeMap, mem};
@@ -12,9 +10,9 @@ use swc_core::{
         ast::*,
         atoms::JsWord,
         utils::{private_ident, quote_ident, quote_str},
-        visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
+        visit::{VisitMut, VisitMutWith},
     },
-    plugin::{errors::HANDLER, plugin_transform, proxies::TransformPluginProgramMetadata},
+    plugin::errors::HANDLER,
 };
 
 mod directive;
@@ -1292,19 +1290,4 @@ where
             .attrs
             .splice(index..index, util::decouple_v_models(elems));
     }
-}
-
-#[plugin_transform]
-pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
-    let options = metadata
-        .get_transform_plugin_config()
-        .map(|json| {
-            serde_json::from_str(&json).expect("failed to parse config of plugin 'vue-jsx'")
-        })
-        .unwrap_or_default();
-    program.fold_with(&mut as_folder(VueJsxTransformVisitor::new(
-        options,
-        metadata.unresolved_mark,
-        metadata.comments,
-    )))
 }

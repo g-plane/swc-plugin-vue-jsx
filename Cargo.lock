@@ -1285,12 +1285,20 @@ dependencies = [
 name = "swc-plugin-vue-jsx"
 version = "0.2.0"
 dependencies = [
+ "serde_json",
+ "swc-vue-jsx-visitor",
+ "swc_core",
+]
+
+[[package]]
+name = "swc-vue-jsx-visitor"
+version = "0.2.0"
+dependencies = [
  "bitflags",
  "css_dataset",
  "indexmap",
  "regex",
  "serde",
- "serde_json",
  "swc_core",
  "swc_ecma_parser",
 ]
