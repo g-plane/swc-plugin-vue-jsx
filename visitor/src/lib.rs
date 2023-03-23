@@ -443,8 +443,8 @@ where
                                                 id: quote_ident!("$event"),
                                                 type_ann: None,
                                             })],
-                                            body: BlockStmtOrExpr::Expr(Box::new(Expr::Assign(
-                                                AssignExpr {
+                                            body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                                                Expr::Assign(AssignExpr {
                                                     span: DUMMY_SP,
                                                     op: op!("="),
                                                     left: PatOrExpr::Expr(Box::new(
@@ -453,7 +453,7 @@ where
                                                     right: Box::new(Expr::Ident(quote_ident!(
                                                         "$event"
                                                     ))),
-                                                },
+                                                }),
                                             ))),
                                             is_async: false,
                                             is_generator: false,
@@ -853,10 +853,10 @@ where
             value: Box::new(Expr::Arrow(ArrowExpr {
                 span: DUMMY_SP,
                 params: vec![],
-                body: BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
+                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
                     span: DUMMY_SP,
                     elems,
-                }))),
+                })))),
                 is_async: false,
                 is_generator: false,
                 type_params: None,

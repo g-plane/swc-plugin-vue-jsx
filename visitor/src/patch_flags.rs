@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(PartialEq, Eq)]
     pub struct PatchFlags: i16 {
         const TEXT = 1;
         const CLASS = 1 << 1;
