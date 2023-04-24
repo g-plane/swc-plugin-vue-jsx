@@ -1308,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "swc-plugin-vue-jsx"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "serde_json",
  "swc-vue-jsx-visitor",
@@ -1317,7 +1317,7 @@ dependencies = [
 
 [[package]]
 name = "swc-vue-jsx-visitor"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "bitflags 2.0.2",
  "css_dataset",
