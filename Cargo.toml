@@ -2,6 +2,5 @@
 members = ["plugin", "visitor"]
 
 [profile.release]
-lto = true
 opt-level = "s"
 strip = "symbols"
