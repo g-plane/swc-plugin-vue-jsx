@@ -1,7 +1,7 @@
 [package]
 name = "swc-vue-jsx-visitor"
 description = "SWC visitor for transforming Vue JSX."
-version = "0.2.3"
+version = "0.2.4"
 authors = ["Pig Fang <g-plane@hotmail.com>"]
 license = "MIT"
 repository = "https://github.com/g-plane/swc-plugin-vue-jsx"
