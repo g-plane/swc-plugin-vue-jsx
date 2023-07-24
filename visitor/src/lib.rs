@@ -477,7 +477,12 @@ where
                             .value
                             .as_ref()
                             .map(|value| match value {
-                                JSXAttrValue::Lit(lit) => Box::new(Expr::Lit(lit.clone())),
+                                JSXAttrValue::Lit(Lit::Str(str)) => Box::new(Expr::Lit(Lit::Str(
+                                    quote_str!(util::transform_text(&str.value)),
+                                ))),
+                                JSXAttrValue::Lit(..) => {
+                                    unreachable!("JSX attribute value literal must be string")
+                                }
                                 JSXAttrValue::JSXExprContainer(JSXExprContainer {
                                     expr: JSXExpr::Expr(expr),
                                     ..
@@ -914,25 +919,7 @@ where
     }
 
     fn transform_jsx_text(&mut self, jsx_text: &JSXText) -> Option<Expr> {
-        let jsx_text_value = jsx_text.value.replace('\t', " ");
-        let mut jsx_text_lines = jsx_text_value.lines().enumerate().peekable();
-
-        let mut lines = vec![];
-        while let Some((index, line)) = jsx_text_lines.next() {
-            let line = if index == 0 {
-                // first line
-                line.trim_end()
-            } else if jsx_text_lines.peek().is_none() {
-                // last line
-                line.trim_start()
-            } else {
-                line.trim()
-            };
-            if !line.is_empty() {
-                lines.push(line);
-            }
-        }
-        let text = lines.join(" ");
+        let text = util::transform_text(&jsx_text.value);
         if text.is_empty() {
             None
         } else {

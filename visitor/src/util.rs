@@ -263,3 +263,25 @@ pub(crate) fn decouple_v_models(
             })
         })
 }
+
+pub(crate) fn transform_text(text: &str) -> String {
+    let jsx_text_value = text.replace('\t', " ");
+    let mut jsx_text_lines = jsx_text_value.lines().enumerate().peekable();
+
+    let mut lines = vec![];
+    while let Some((index, line)) = jsx_text_lines.next() {
+        let line = if index == 0 {
+            // first line
+            line.trim_end()
+        } else if jsx_text_lines.peek().is_none() {
+            // last line
+            line.trim_start()
+        } else {
+            line.trim()
+        };
+        if !line.is_empty() {
+            lines.push(line);
+        }
+    }
+    lines.join(" ")
+}

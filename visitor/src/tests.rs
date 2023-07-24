@@ -193,6 +193,15 @@ test!(
 );
 
 test!(
+    empty_string,
+    r#"<h1 title=""></h1>"#,
+    r#"
+    import { createVNode as _createVNode } from "vue";
+    _createVNode("h1", { "title": "" }, null);
+    "#
+);
+
+test!(
     v_html,
     r#"<h1 v-html="<div>foo</div>"></h1>"#,
     r#"
