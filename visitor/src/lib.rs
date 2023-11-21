@@ -19,8 +19,6 @@ mod directive;
 mod options;
 mod patch_flags;
 mod slot_flag;
-#[cfg(test)]
-mod tests;
 mod util;
 
 const FRAGMENT: &str = "Fragment";
@@ -355,7 +353,7 @@ where
                                                 }))) => {
                                                     dynamic_props
                                                         .insert(Cow::from(value.to_string()));
-                                                    PropName::Str(quote_str!(value))
+                                                    PropName::Str(quote_str!(&**value))
                                                 }
                                                 Some(expr) => {
                                                     PropName::Computed(ComputedPropName {
@@ -1161,7 +1159,7 @@ where
                     })],
                     src: Box::new(quote_str!("@vue/babel-helper-vue-transform-on")),
                     type_only: false,
-                    asserts: None,
+                    with: None,
                 })),
             )
         }
@@ -1185,7 +1183,7 @@ where
                         .collect(),
                     src: Box::new(quote_str!("vue")),
                     type_only: false,
-                    asserts: None,
+                    with: None,
                 })),
             );
         }
@@ -1253,23 +1251,37 @@ where
                         ..
                     }) if sym == "v-models" => Some(i),
                     _ => None,
-                }) else {
-                    return;
-                };
+                })
+        else {
+            return;
+        };
 
-        let JSXAttrOrSpread::JSXAttr(JSXAttr { value, .. }) = jsx_opening_element.attrs.remove(index) else {
+        let JSXAttrOrSpread::JSXAttr(JSXAttr { value, .. }) =
+            jsx_opening_element.attrs.remove(index)
+        else {
             unreachable!()
         };
 
         let Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
             expr: JSXExpr::Expr(expr),
             ..
-        })) = value else {
-            HANDLER.with(|handler| handler.span_err(value.span(), "you should pass a Two-dimensional Arrays to v-models"));
+        })) = value
+        else {
+            HANDLER.with(|handler| {
+                handler.span_err(
+                    value.span(),
+                    "you should pass a Two-dimensional Arrays to v-models",
+                )
+            });
             return;
         };
         let Expr::Array(ArrayLit { elems, .. }) = *expr else {
-            HANDLER.with(|handler| handler.span_err(expr.span(), "you should pass a Two-dimensional Arrays to v-models"));
+            HANDLER.with(|handler| {
+                handler.span_err(
+                    expr.span(),
+                    "you should pass a Two-dimensional Arrays to v-models",
+                )
+            });
             return;
         };
 

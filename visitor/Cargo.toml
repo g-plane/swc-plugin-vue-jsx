@@ -8,15 +8,17 @@ repository = "https://github.com/g-plane/swc-plugin-vue-jsx"
 edition = "2021"
 
 [dependencies]
-bitflags = "2.0"
-css_dataset = "0.2"
-indexmap = "1.9"
-regex = "1.7"
+bitflags = "2.4"
+css_dataset = "0.3"
+indexmap = "2.1"
+regex = "1.10"
 serde = { version = "1.0", features = ["derive"] }
-swc_core = { version = "0.75", features = [
+swc_core = { version = "0.86", features = [
+  "ecma_parser",
   "ecma_plugin_transform",
   "ecma_utils",
 ] }
 
 [dev-dependencies]
-swc_ecma_parser = "0.133"
+serde_json = "1.0"
+testing = "0.35"

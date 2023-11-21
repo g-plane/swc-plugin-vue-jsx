@@ -43,7 +43,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
     let (name, mut argument) = match &jsx_attr.name {
         JSXAttrName::Ident(ident) => (&ident.sym, None),
         JSXAttrName::JSXNamespacedName(JSXNamespacedName { ns, name }) => {
-            (&ns.sym, Some(Expr::Lit(Lit::Str(quote_str!(&name.sym)))))
+            (&ns.sym, Some(Expr::Lit(Lit::Str(quote_str!(&*name.sym)))))
         }
     };
     let name = name.trim_start_matches('v').trim_start_matches('-');

@@ -4,7 +4,7 @@ use serde::{
 };
 use std::{fmt, ops::Deref};
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Options {
     pub transform_on: bool,
@@ -39,6 +39,7 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Clone, Debug)]
 pub struct Regex(regex::Regex);
 
 impl Regex {
