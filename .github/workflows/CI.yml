@@ -31,5 +31,7 @@ jobs:
         with:
           version: 8.10.5
           run_install: true
+      - name: Add Rust target
+        run: rustup target add wasm32-unknown-unknown
       - run: pnpm build
       - run: pnpm test
