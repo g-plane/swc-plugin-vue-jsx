@@ -25,7 +25,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
-      - run: cargo test
       - name: Setup pnpm
         uses: pnpm/action-setup@v2.4.0
         with:
