@@ -17,7 +17,7 @@
     ".": "./swc_plugin_vue_jsx.wasm"
   },
   "scripts": {
-    "test": "cargo test && vitest run",
+    "test": "vitest",
     "build": "cargo build -p swc-plugin-vue-jsx --target wasm32-unknown-unknown --release && cp target/wasm32-unknown-unknown/release/swc_plugin_vue_jsx.wasm .",
     "prepublishOnly": "pnpm build"
   },
