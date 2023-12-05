@@ -25,8 +25,8 @@ test('transform basic JSX', async () => {
   const code = `<div></div>`
   const output = await transform(code, options)
   expect(output.code).toMatchInlineSnapshot(`
-    "import { createVNode as _createVNode } from \\"vue\\";
-    _createVNode(\\"div\\", null, null);
+    "import { createVNode as _createVNode } from "vue";
+    _createVNode("div", null, null);
     "
   `)
 })
