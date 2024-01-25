@@ -25,7 +25,7 @@ jobs:
         with:
           toolchain: stable
           target: wasm32-unknown-unknown
-      - run: pnpm publish --provenance --access public
+      - run: pnpm publish --provenance --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish crates
