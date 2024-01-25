@@ -1223,35 +1223,31 @@ where
 
         if !self.injecting_consts.is_empty() || !self.injecting_vars.is_empty() {
             if let BlockStmtOrExpr::Expr(ret) = &*arrow_expr.body {
-                let mut stmts = vec![Stmt::Return(ReturnStmt {
-                    span: DUMMY_SP,
-                    arg: Some(ret.clone()),
-                })];
+                let mut stmts = Vec::with_capacity(3);
 
                 if !self.injecting_consts.is_empty() {
-                    stmts.insert(
-                        0,
-                        Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                            span: DUMMY_SP,
-                            kind: VarDeclKind::Const,
-                            declare: false,
-                            decls: mem::take(&mut self.injecting_consts),
-                        }))),
-                    );
+                    stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                        span: DUMMY_SP,
+                        kind: VarDeclKind::Const,
+                        declare: false,
+                        decls: mem::take(&mut self.injecting_consts),
+                    }))));
                 }
 
                 if !self.injecting_vars.is_empty() {
-                    stmts.insert(
-                        0,
-                        Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                            span: DUMMY_SP,
-                            kind: VarDeclKind::Let,
-                            declare: false,
-                            decls: mem::take(&mut self.injecting_vars),
-                        }))),
-                    );
+                    stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                        span: DUMMY_SP,
+                        kind: VarDeclKind::Let,
+                        declare: false,
+                        decls: mem::take(&mut self.injecting_vars),
+                    }))));
                     self.slot_counter = 1;
                 }
+
+                stmts.push(Stmt::Return(ReturnStmt {
+                    span: DUMMY_SP,
+                    arg: Some(ret.clone()),
+                }));
 
                 arrow_expr.body = Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                     span: DUMMY_SP,
