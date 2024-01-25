@@ -1218,6 +1218,49 @@ where
         }
     }
 
+    fn visit_mut_arrow_expr(&mut self, arrow_expr: &mut ArrowExpr) {
+        arrow_expr.visit_mut_children_with(self);
+
+        if !self.injecting_consts.is_empty() || !self.injecting_vars.is_empty() {
+            if let BlockStmtOrExpr::Expr(ret) = &*arrow_expr.body {
+                let mut stmts = vec![Stmt::Return(ReturnStmt {
+                    span: DUMMY_SP,
+                    arg: Some(ret.clone()),
+                })];
+
+                if !self.injecting_consts.is_empty() {
+                    stmts.insert(
+                        0,
+                        Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                            span: DUMMY_SP,
+                            kind: VarDeclKind::Const,
+                            declare: false,
+                            decls: mem::take(&mut self.injecting_consts),
+                        }))),
+                    );
+                }
+
+                if !self.injecting_vars.is_empty() {
+                    stmts.insert(
+                        0,
+                        Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                            span: DUMMY_SP,
+                            kind: VarDeclKind::Let,
+                            declare: false,
+                            decls: mem::take(&mut self.injecting_vars),
+                        }))),
+                    );
+                    self.slot_counter = 1;
+                }
+
+                arrow_expr.body = Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
+                    span: DUMMY_SP,
+                    stmts,
+                }));
+            }
+        }
+    }
+
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
         expr.visit_mut_children_with(self);
 
