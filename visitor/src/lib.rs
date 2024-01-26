@@ -1160,6 +1160,7 @@ where
                     src: Box::new(quote_str!("@vue/babel-helper-vue-transform-on")),
                     type_only: false,
                     with: None,
+                    phase: Default::default(),
                 })),
             )
         }
@@ -1184,6 +1185,7 @@ where
                     src: Box::new(quote_str!("vue")),
                     type_only: false,
                     with: None,
+                    phase: Default::default(),
                 })),
             );
         }
