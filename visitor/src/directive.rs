@@ -40,15 +40,33 @@ pub(crate) enum Directive {
 }
 
 pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directive {
-    let (name, mut argument) = match &jsx_attr.name {
-        JSXAttrName::Ident(ident) => (&ident.sym, None),
+    let (name, argument, splitted) = match &jsx_attr.name {
+        JSXAttrName::Ident(ident) => {
+            let mut splitted = ident
+                .sym
+                .trim_start_matches('v')
+                .trim_start_matches('-')
+                .split('_');
+            (
+                splitted.next().unwrap_or(&*ident.sym).to_ascii_lowercase(),
+                splitted.next(),
+                splitted,
+            )
+        }
         JSXAttrName::JSXNamespacedName(JSXNamespacedName { ns, name }) => {
-            (&ns.sym, Some(Expr::Lit(Lit::Str(quote_str!(&*name.sym)))))
+            let mut splitted = name.sym.split('_');
+            (
+                ns.sym
+                    .trim_start_matches('v')
+                    .trim_start_matches('-')
+                    .to_ascii_lowercase(),
+                Some(splitted.next().unwrap_or(&*name.sym)),
+                splitted,
+            )
         }
     };
-    let name = name.trim_start_matches('v').trim_start_matches('-');
-    let mut splitted = name.split('_');
-    let name = splitted.next().unwrap_or(name).to_ascii_lowercase();
+
+    let mut argument = argument.map(|argument| Expr::Lit(Lit::Str(quote_str!(argument))));
 
     match &*name {
         "html" => return parse_v_html_directive(jsx_attr),
