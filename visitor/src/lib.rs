@@ -5,7 +5,7 @@ use patch_flags::PatchFlags;
 use slot_flag::SlotFlag;
 use std::{borrow::Cow, collections::BTreeMap, mem};
 use swc_core::{
-    common::{comments::Comments, Mark, Span, Spanned, DUMMY_SP},
+    common::{comments::Comments, Mark, Span, Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::*,
         atoms::JsWord,
@@ -38,6 +38,7 @@ where
     options: Options,
     vue_imports: BTreeMap<&'static str, Ident>,
     transform_on_helper: Option<Ident>,
+    define_component: Option<SyntaxContext>,
 
     unresolved_mark: Mark,
     comments: Option<C>,
@@ -61,6 +62,7 @@ where
             options,
             vue_imports: Default::default(),
             transform_on_helper: None,
+            define_component: None,
 
             unresolved_mark,
             comments,
@@ -1329,5 +1331,29 @@ where
         jsx_opening_element
             .attrs
             .splice(index..index, util::decouple_v_models(elems));
+    }
+
+    fn visit_mut_import_decl(&mut self, import_decl: &mut ImportDecl) {
+        import_decl.visit_mut_children_with(self);
+
+        if import_decl.src.value != "vue" {
+            return;
+        }
+
+        let ctxt = import_decl.specifiers.iter().find_map(|specifier| {
+            if let ImportSpecifier::Named(ImportNamedSpecifier {
+                local,
+                imported: None,
+                ..
+            }) = specifier
+            {
+                (local.sym == "defineComponent").then_some(local.span.ctxt())
+            } else {
+                None
+            }
+        });
+        if let Some(ctxt) = ctxt {
+            self.define_component = Some(ctxt);
+        }
     }
 }
