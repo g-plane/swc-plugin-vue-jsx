@@ -20,6 +20,8 @@ pub struct Options {
     pub enable_object_slots: bool,
 
     pub pragma: Option<String>,
+
+    pub resolve_type: bool,
 }
 
 impl Default for Options {
@@ -31,6 +33,7 @@ impl Default for Options {
             merge_props: true,
             enable_object_slots: true,
             pragma: None,
+            resolve_type: false,
         }
     }
 }

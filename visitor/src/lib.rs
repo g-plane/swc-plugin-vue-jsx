@@ -1,3 +1,4 @@
+use ahash::AHashMap;
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
 use indexmap::IndexSet;
 pub use options::{Options, Regex};
@@ -18,6 +19,7 @@ use swc_core::{
 mod directive;
 mod options;
 mod patch_flags;
+mod resolve_type;
 mod slot_flag;
 mod util;
 
@@ -38,7 +40,10 @@ where
     options: Options,
     vue_imports: BTreeMap<&'static str, Ident>,
     transform_on_helper: Option<Ident>,
+
     define_component: Option<SyntaxContext>,
+    interfaces: AHashMap<(JsWord, SyntaxContext), TsInterfaceDecl>,
+    type_aliases: AHashMap<(JsWord, SyntaxContext), TsType>,
 
     unresolved_mark: Mark,
     comments: Option<C>,
@@ -62,7 +67,10 @@ where
             options,
             vue_imports: Default::default(),
             transform_on_helper: None,
+
             define_component: None,
+            interfaces: Default::default(),
+            type_aliases: Default::default(),
 
             unresolved_mark,
             comments,
@@ -1100,6 +1108,17 @@ where
             elems
         }
     }
+
+    fn is_define_component_call(&self, CallExpr { callee, .. }: &CallExpr) -> bool {
+        callee
+            .as_expr()
+            .and_then(|expr| expr.as_ident())
+            .and_then(|ident| {
+                self.define_component
+                    .map(|ctxt| ctxt == ident.span.ctxt() && ident.sym == "defineComponent")
+            })
+            .unwrap_or_default()
+    }
 }
 
 impl<C> VisitMut for VueJsxTransformVisitor<C>
@@ -1354,6 +1373,95 @@ where
         });
         if let Some(ctxt) = ctxt {
             self.define_component = Some(ctxt);
+        }
+    }
+
+    fn visit_mut_ts_interface_decl(&mut self, ts_interface_decl: &mut TsInterfaceDecl) {
+        ts_interface_decl.visit_mut_children_with(self);
+        if self.options.resolve_type {
+            let key = (
+                ts_interface_decl.id.sym.clone(),
+                ts_interface_decl.id.span.ctxt(),
+            );
+            if let Some(interface) = self.interfaces.get_mut(&key) {
+                interface
+                    .body
+                    .body
+                    .extend_from_slice(&ts_interface_decl.body.body);
+            } else {
+                self.interfaces.insert(key, ts_interface_decl.clone());
+            }
+        }
+    }
+
+    fn visit_mut_ts_type_alias_decl(&mut self, ts_type_alias_decl: &mut TsTypeAliasDecl) {
+        ts_type_alias_decl.visit_mut_children_with(self);
+        if self.options.resolve_type {
+            self.type_aliases.insert(
+                (
+                    ts_type_alias_decl.id.sym.clone(),
+                    ts_type_alias_decl.id.span.ctxt(),
+                ),
+                (*ts_type_alias_decl.type_ann).clone(),
+            );
+        }
+    }
+
+    fn visit_mut_call_expr(&mut self, call_expr: &mut CallExpr) {
+        call_expr.visit_mut_children_with(self);
+
+        if !self.options.resolve_type {
+            return;
+        }
+
+        if !self.is_define_component_call(call_expr) {
+            return;
+        }
+
+        let Some((maybe_setup, args)) = call_expr.args.split_first_mut() else {
+            return;
+        };
+
+        match args.first_mut().map(|arg| &mut *arg.expr) {
+            Some(Expr::Object(object)) => {
+                if !object.props.iter().any(|prop| {
+                    prop.as_prop()
+                        .and_then(|prop| prop.as_key_value())
+                        .and_then(|key_value| key_value.key.as_ident())
+                        .map(|ident| ident.sym == "props")
+                        .unwrap_or_default()
+                }) {
+                    if let Some(prop_types) = self.extract_props_type(maybe_setup) {
+                        object
+                            .props
+                            .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                                key: PropName::Ident(quote_ident!("props")),
+                                value: Box::new(Expr::Object(prop_types)),
+                            }))));
+                    }
+                }
+            }
+            None => {
+                let mut props = vec![];
+
+                if let Some(prop_types) = self.extract_props_type(maybe_setup) {
+                    props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        key: PropName::Ident(quote_ident!("props")),
+                        value: Box::new(Expr::Object(prop_types)),
+                    }))));
+                }
+
+                if !props.is_empty() {
+                    call_expr.args.push(ExprOrSpread {
+                        expr: Box::new(Expr::Object(ObjectLit {
+                            props,
+                            span: DUMMY_SP,
+                        })),
+                        spread: None,
+                    });
+                }
+            }
+            _ => {}
         }
     }
 }
