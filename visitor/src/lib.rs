@@ -1418,50 +1418,99 @@ where
             return;
         }
 
-        let Some((maybe_setup, args)) = call_expr.args.split_first_mut() else {
+        let Some(maybe_setup) = call_expr.args.first() else {
             return;
         };
 
-        match args.first_mut().map(|arg| &mut *arg.expr) {
-            Some(Expr::Object(object)) => {
-                if !object.props.iter().any(|prop| {
-                    prop.as_prop()
-                        .and_then(|prop| prop.as_key_value())
-                        .and_then(|key_value| key_value.key.as_ident())
-                        .map(|ident| ident.sym == "props")
-                        .unwrap_or_default()
-                }) {
-                    if let Some(prop_types) = self.extract_props_type(maybe_setup) {
-                        object
-                            .props
-                            .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                                key: PropName::Ident(quote_ident!("props")),
-                                value: Box::new(Expr::Object(prop_types)),
-                            }))));
-                    }
-                }
-            }
-            None => {
-                let mut props = vec![];
+        if let Some(prop_types) = self.extract_props_type(maybe_setup) {
+            inject_option(call_expr, "props", Expr::Object(prop_types));
+        }
+    }
 
-                if let Some(prop_types) = self.extract_props_type(maybe_setup) {
-                    props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                        key: PropName::Ident(quote_ident!("props")),
-                        value: Box::new(Expr::Object(prop_types)),
+    fn visit_mut_var_declarator(&mut self, var_declarator: &mut VarDeclarator) {
+        var_declarator.visit_mut_children_with(self);
+
+        if !self.options.resolve_type {
+            return;
+        }
+        let Pat::Ident(name) = &var_declarator.name else {
+            return;
+        };
+        let Some(Expr::Call(call)) = var_declarator.init.as_deref_mut() else {
+            return;
+        };
+        if !self.is_define_component_call(call) {
+            return;
+        }
+
+        inject_option(
+            call,
+            "name",
+            Expr::Lit(Lit::Str(quote_str!(name.sym.clone()))),
+        );
+    }
+}
+
+fn inject_option(call: &mut CallExpr, name: &'static str, value: Expr) {
+    let options = call.args.get_mut(1);
+    if options
+        .as_ref()
+        .and_then(|options| options.spread)
+        .is_some()
+    {
+        return;
+    }
+
+    match options.map(|options| &mut *options.expr) {
+        Some(Expr::Object(object)) => {
+            if !object.props.iter().any(|prop| {
+                prop.as_prop()
+                    .and_then(|prop| prop.as_key_value())
+                    .and_then(|key_value| key_value.key.as_ident())
+                    .map(|ident| ident.sym == name)
+                    .unwrap_or_default()
+            }) {
+                object
+                    .props
+                    .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        key: PropName::Ident(quote_ident!(name)),
+                        value: Box::new(value),
                     }))));
-                }
-
-                if !props.is_empty() {
-                    call_expr.args.push(ExprOrSpread {
-                        expr: Box::new(Expr::Object(ObjectLit {
-                            props,
-                            span: DUMMY_SP,
-                        })),
-                        spread: None,
-                    });
-                }
             }
-            _ => {}
+        }
+        Some(..) => {
+            let expr = Expr::Object(ObjectLit {
+                props: vec![
+                    PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        key: PropName::Ident(quote_ident!(name)),
+                        value: Box::new(value),
+                    }))),
+                    PropOrSpread::Spread(SpreadElement {
+                        expr: call.args.remove(1).expr,
+                        dot3_token: DUMMY_SP,
+                    }),
+                ],
+                span: DUMMY_SP,
+            });
+            call.args.insert(
+                1,
+                ExprOrSpread {
+                    expr: Box::new(expr),
+                    spread: None,
+                },
+            );
+        }
+        None => {
+            call.args.push(ExprOrSpread {
+                expr: Box::new(Expr::Object(ObjectLit {
+                    props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                        key: PropName::Ident(quote_ident!(name)),
+                        value: Box::new(value),
+                    })))],
+                    span: DUMMY_SP,
+                })),
+                spread: None,
+            });
         }
     }
 }
