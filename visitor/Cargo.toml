@@ -8,9 +8,9 @@ repository = "https://github.com/g-plane/swc-plugin-vue-jsx"
 edition = "2021"
 
 [dependencies]
-ahash = "0.8"
 bitflags = "2.4"
 css_dataset = "0.3"
+fnv = "1.0"
 indexmap = "2.1"
 regex = "1.10"
 serde = { version = "1.0", features = ["derive"] }

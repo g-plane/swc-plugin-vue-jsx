@@ -1,5 +1,5 @@
-use ahash::AHashMap;
 use directive::{is_directive, parse_directive, Directive, NormalDirective};
+use fnv::FnvHashMap;
 use indexmap::IndexSet;
 pub use options::{Options, Regex};
 use patch_flags::PatchFlags;
@@ -42,8 +42,8 @@ where
     transform_on_helper: Option<Ident>,
 
     define_component: Option<SyntaxContext>,
-    interfaces: AHashMap<(JsWord, SyntaxContext), TsInterfaceDecl>,
-    type_aliases: AHashMap<(JsWord, SyntaxContext), TsType>,
+    interfaces: FnvHashMap<(JsWord, SyntaxContext), TsInterfaceDecl>,
+    type_aliases: FnvHashMap<(JsWord, SyntaxContext), TsType>,
 
     unresolved_mark: Mark,
     comments: Option<C>,
