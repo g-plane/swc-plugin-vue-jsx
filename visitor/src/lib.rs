@@ -1425,7 +1425,7 @@ where
         let props_types = self.extract_props_type(maybe_setup);
         let emits_types = self.extract_emits_type(maybe_setup);
         if let Some(prop_types) = props_types {
-            inject_define_component_option(call_expr, "props", Expr::Object(prop_types));
+            inject_define_component_option(call_expr, "props", prop_types);
         }
         if let Some(emits_type) = emits_types {
             inject_define_component_option(call_expr, "emits", Expr::Array(emits_type));

@@ -1,5 +1,6 @@
 use crate::VueJsxTransformVisitor;
 use indexmap::{IndexMap, IndexSet};
+use std::borrow::Cow;
 use swc_core::{
     common::{comments::Comments, EqIgnoreSpan, Spanned, DUMMY_SP},
     ecma::{
@@ -26,35 +27,163 @@ impl<C> VueJsxTransformVisitor<C>
 where
     C: Comments,
 {
-    pub(crate) fn extract_props_type(&self, setup_fn: &ExprOrSpread) -> Option<ObjectLit> {
+    pub(crate) fn extract_props_type(&mut self, setup_fn: &ExprOrSpread) -> Option<Expr> {
+        let mut defaults = None;
         let Some(first_param_type) = (if let ExprOrSpread { expr, spread: None } = setup_fn {
             match &**expr {
-                Expr::Arrow(arrow) => match arrow.params.first() {
-                    Some(Pat::Ident(ident)) => ident.type_ann.as_deref(),
-                    Some(Pat::Array(array)) => array.type_ann.as_deref(),
-                    Some(Pat::Object(object)) => object.type_ann.as_deref(),
-                    _ => return None,
-                },
-                Expr::Fn(fn_expr) => {
-                    match fn_expr.function.params.first().map(|param| &param.pat) {
-                        Some(Pat::Ident(ident)) => ident.type_ann.as_deref(),
-                        Some(Pat::Array(array)) => array.type_ann.as_deref(),
-                        Some(Pat::Object(object)) => object.type_ann.as_deref(),
-                        _ => return None,
+                Expr::Arrow(arrow) => arrow.params.first().and_then(|param| {
+                    if let Pat::Assign(AssignPat { right, .. }) = param {
+                        defaults = Some(&**right);
                     }
-                }
-                _ => return None,
+                    extract_type_ann_from_pat(param)
+                }),
+                Expr::Fn(fn_expr) => fn_expr.function.params.first().and_then(|param| {
+                    if let Pat::Assign(AssignPat { right, .. }) = &param.pat {
+                        defaults = Some(&**right);
+                    }
+                    extract_type_ann_from_pat(&param.pat)
+                }),
+                _ => None,
             }
         } else {
-            return None;
+            None
         }) else {
             return None;
         };
 
-        Some(self.build_props_type(first_param_type))
+        enum Defaults<'n> {
+            Static(Vec<(Cow<'n, PropName>, Expr)>),
+            Dynamic(&'n Expr),
+        }
+        let defaults = defaults.map(|defaults| {
+            if let Expr::Object(ObjectLit { props, .. }) = defaults {
+                if let Some(props) = props
+                    .iter()
+                    .map(|prop| {
+                        if let PropOrSpread::Prop(prop) = prop {
+                            match &**prop {
+                                Prop::Shorthand(ident) => Some((
+                                    Cow::Owned(PropName::Ident(ident.clone())),
+                                    Expr::Arrow(ArrowExpr {
+                                        params: vec![],
+                                        body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                                            Expr::Ident(ident.clone()),
+                                        ))),
+                                        is_async: false,
+                                        is_generator: false,
+                                        type_params: None,
+                                        return_type: None,
+                                        span: DUMMY_SP,
+                                    }),
+                                )),
+                                Prop::KeyValue(KeyValueProp { key, value }) => {
+                                    let Some(key) = try_unwrap_lit_prop_name(key) else {
+                                        return None;
+                                    };
+                                    Some((
+                                        key,
+                                        if value.is_lit() {
+                                            (**value).clone()
+                                        } else {
+                                            Expr::Arrow(ArrowExpr {
+                                                params: vec![],
+                                                body: Box::new(BlockStmtOrExpr::Expr(
+                                                    value.clone(),
+                                                )),
+                                                is_async: false,
+                                                is_generator: false,
+                                                type_params: None,
+                                                return_type: None,
+                                                span: DUMMY_SP,
+                                            })
+                                        },
+                                    ))
+                                }
+                                Prop::Getter(GetterProp {
+                                    key,
+                                    body: Some(body),
+                                    ..
+                                }) => {
+                                    let Some(key) = try_unwrap_lit_prop_name(key) else {
+                                        return None;
+                                    };
+                                    Some((
+                                        key,
+                                        Expr::Arrow(ArrowExpr {
+                                            params: vec![],
+                                            body: Box::new(BlockStmtOrExpr::BlockStmt(
+                                                body.clone(),
+                                            )),
+                                            is_async: false,
+                                            is_generator: false,
+                                            type_params: None,
+                                            return_type: None,
+                                            span: DUMMY_SP,
+                                        }),
+                                    ))
+                                }
+                                Prop::Method(MethodProp { key, function }) => {
+                                    let Some(key) = try_unwrap_lit_prop_name(key) else {
+                                        return None;
+                                    };
+                                    Some((
+                                        key,
+                                        Expr::Fn(FnExpr {
+                                            ident: None,
+                                            function: function.clone(),
+                                        }),
+                                    ))
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Option<Vec<_>>>()
+                {
+                    Defaults::Static(props)
+                } else {
+                    Defaults::Dynamic(defaults)
+                }
+            } else {
+                Defaults::Dynamic(defaults)
+            }
+        });
+
+        Some(match defaults {
+            Some(Defaults::Static(props)) => {
+                Expr::Object(self.build_props_type(first_param_type, Some(props)))
+            }
+            Some(Defaults::Dynamic(expr)) => {
+                let merge_defaults = self.import_from_vue("mergeDefaults");
+                Expr::Call(CallExpr {
+                    callee: Callee::Expr(Box::new(Expr::Ident(merge_defaults))),
+                    args: vec![
+                        ExprOrSpread {
+                            expr: Box::new(Expr::Object(
+                                self.build_props_type(first_param_type, None),
+                            )),
+                            spread: None,
+                        },
+                        ExprOrSpread {
+                            expr: Box::new(expr.clone()),
+                            spread: None,
+                        },
+                    ],
+                    type_args: None,
+                    span: DUMMY_SP,
+                })
+            }
+            None => Expr::Object(self.build_props_type(first_param_type, None)),
+        })
     }
 
-    fn build_props_type(&self, TsTypeAnn { type_ann, .. }: &TsTypeAnn) -> ObjectLit {
+    fn build_props_type(
+        &self,
+        TsTypeAnn { type_ann, .. }: &TsTypeAnn,
+        defaults: Option<Vec<(Cow<PropName>, Expr)>>,
+    ) -> ObjectLit {
         let mut props = Vec::with_capacity(3);
         self.resolve_type_elements(type_ann, &mut props);
 
@@ -141,48 +270,68 @@ where
             props: irs
                 .into_iter()
                 .map(|(prop_name, mut ir)| {
+                    let mut props = vec![
+                        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                            key: PropName::Ident(quote_ident!("type")),
+                            value: Box::new(if ir.types.len() == 1 {
+                                if let Some(ty) = ir.types.pop().unwrap() {
+                                    Expr::Ident(quote_ident!(ty))
+                                } else {
+                                    Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+                                }
+                            } else {
+                                Expr::Array(ArrayLit {
+                                    elems: ir
+                                        .types
+                                        .into_iter()
+                                        .map(|ty| {
+                                            Some(ExprOrSpread {
+                                                expr: Box::new(if let Some(ty) = ty {
+                                                    Expr::Ident(quote_ident!(ty))
+                                                } else {
+                                                    Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+                                                }),
+                                                spread: None,
+                                            })
+                                        })
+                                        .collect(),
+                                    span: DUMMY_SP,
+                                })
+                            }),
+                        }))),
+                        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                            key: PropName::Ident(quote_ident!("required")),
+                            value: Box::new(Expr::Lit(Lit::Bool(Bool {
+                                value: ir.required,
+                                span: DUMMY_SP,
+                            }))),
+                        }))),
+                    ];
+                    if let Some((_, default)) = defaults.iter().flatten().find(|(name, _)| {
+                        name.eq_ignore_span(&prop_name)
+                            || if let (
+                                PropName::Ident(Ident { sym: a, .. }),
+                                PropName::Str(Str { value: b, .. }),
+                            )
+                            | (
+                                PropName::Str(Str { value: a, .. }),
+                                PropName::Ident(Ident { sym: b, .. }),
+                            ) = (&**name, &prop_name)
+                            {
+                                a == b
+                            } else {
+                                false
+                            }
+                    }) {
+                        props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                            key: PropName::Ident(quote_ident!("default")),
+                            value: Box::new(default.clone()),
+                        }))));
+                    }
                     PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                         key: prop_name,
                         value: Box::new(Expr::Object(ObjectLit {
-                            props: vec![
-                                PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                                    key: PropName::Ident(quote_ident!("type")),
-                                    value: Box::new(if ir.types.len() == 1 {
-                                        if let Some(ty) = ir.types.pop().unwrap() {
-                                            Expr::Ident(quote_ident!(ty))
-                                        } else {
-                                            Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
-                                        }
-                                    } else {
-                                        Expr::Array(ArrayLit {
-                                            elems: ir
-                                                .types
-                                                .into_iter()
-                                                .map(|ty| {
-                                                    Some(ExprOrSpread {
-                                                        expr: Box::new(if let Some(ty) = ty {
-                                                            Expr::Ident(quote_ident!(ty))
-                                                        } else {
-                                                            Expr::Lit(Lit::Null(Null {
-                                                                span: DUMMY_SP,
-                                                            }))
-                                                        }),
-                                                        spread: None,
-                                                    })
-                                                })
-                                                .collect(),
-                                            span: DUMMY_SP,
-                                        })
-                                    }),
-                                }))),
-                                PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                                    key: PropName::Ident(quote_ident!("required")),
-                                    value: Box::new(Expr::Lit(Lit::Bool(Bool {
-                                        value: ir.required,
-                                        span: DUMMY_SP,
-                                    }))),
-                                }))),
-                            ],
+                            props,
                             span: DUMMY_SP,
                         })),
                     })))
@@ -1024,21 +1173,46 @@ where
 }
 
 fn extract_prop_name(expr: Expr, computed: bool) -> PropName {
-    if computed {
-        PropName::Computed(ComputedPropName {
-            expr: Box::new(expr),
-            span: DUMMY_SP,
-        })
-    } else {
-        match expr {
-            Expr::Ident(ident) => PropName::Ident(ident),
-            Expr::Lit(Lit::Str(str)) => PropName::Str(str),
-            Expr::Lit(Lit::Num(num)) => PropName::Num(num),
-            Expr::Lit(Lit::BigInt(bigint)) => PropName::BigInt(bigint),
-            _ => {
+    match expr {
+        Expr::Ident(ident) => PropName::Ident(ident),
+        Expr::Lit(Lit::Str(str)) => PropName::Str(str),
+        Expr::Lit(Lit::Num(num)) => PropName::Num(num),
+        Expr::Lit(Lit::BigInt(bigint)) => PropName::BigInt(bigint),
+        _ => {
+            if computed {
+                PropName::Computed(ComputedPropName {
+                    expr: Box::new(expr),
+                    span: DUMMY_SP,
+                })
+            } else {
                 HANDLER.with(|handler| handler.span_err(expr.span(), "Unsupported prop key."));
                 PropName::Ident(quote_ident!(""))
             }
         }
+    }
+}
+
+fn try_unwrap_lit_prop_name(prop_name: &PropName) -> Option<Cow<PropName>> {
+    match prop_name {
+        PropName::Ident(..) | PropName::Str(..) | PropName::Num(..) | PropName::BigInt(..) => {
+            Some(Cow::Borrowed(prop_name))
+        }
+        PropName::Computed(ComputedPropName { expr, .. }) => match &**expr {
+            Expr::Ident(ident) => Some(Cow::Owned(PropName::Ident(ident.clone()))),
+            Expr::Lit(Lit::Str(str)) => Some(Cow::Owned(PropName::Str(str.clone()))),
+            Expr::Lit(Lit::Num(num)) => Some(Cow::Owned(PropName::Num(num.clone()))),
+            Expr::Lit(Lit::BigInt(bigint)) => Some(Cow::Owned(PropName::BigInt(bigint.clone()))),
+            _ => None,
+        },
+    }
+}
+
+fn extract_type_ann_from_pat(pat: &Pat) -> Option<&TsTypeAnn> {
+    match pat {
+        Pat::Ident(ident) => ident.type_ann.as_deref(),
+        Pat::Object(object) => object.type_ann.as_deref(),
+        Pat::Array(array) => array.type_ann.as_deref(),
+        Pat::Assign(assign) => extract_type_ann_from_pat(&assign.left),
+        _ => None,
     }
 }
