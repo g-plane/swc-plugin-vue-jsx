@@ -2,7 +2,7 @@ use crate::VueJsxTransformVisitor;
 use indexmap::{IndexMap, IndexSet};
 use std::borrow::Cow;
 use swc_core::{
-    common::{comments::Comments, EqIgnoreSpan, Spanned, DUMMY_SP},
+    common::{comments::Comments, EqIgnoreSpan, Span, Spanned, DUMMY_SP},
     ecma::{
         ast::*,
         atoms::{js_word, JsWord},
@@ -172,7 +172,13 @@ where
                         },
                     ],
                     type_args: None,
-                    span: DUMMY_SP,
+                    span: if let Some(comments) = &self.comments {
+                        let span = Span::dummy_with_cmt();
+                        comments.add_pure_comment(span.lo);
+                        span
+                    } else {
+                        DUMMY_SP
+                    },
                 })
             }
             None => Expr::Object(self.build_props_type(first_param_type, None)),

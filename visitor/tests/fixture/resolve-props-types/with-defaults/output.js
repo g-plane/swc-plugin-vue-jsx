@@ -71,7 +71,7 @@ defineComponent((props: {
 } = {
     ...defaults
 })=>{}, {
-    props: _mergeDefaults({
+    props: /*#__PURE__*/ _mergeDefaults({
         foo: {
             type: String,
             required: false
@@ -93,7 +93,7 @@ defineComponent((props: {
     bar?: number;
     baz: boolean;
 } = defaults)=>{}, {
-    props: _mergeDefaults({
+    props: /*#__PURE__*/ _mergeDefaults({
         foo: {
             type: String,
             required: false
@@ -115,7 +115,7 @@ defineComponent((props: {
         return 'foo';
     }
 })=>{}, {
-    props: _mergeDefaults({
+    props: /*#__PURE__*/ _mergeDefaults({
         foo: {
             type: Function,
             required: false
