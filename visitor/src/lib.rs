@@ -1422,8 +1422,13 @@ where
             return;
         };
 
-        if let Some(prop_types) = self.extract_props_type(maybe_setup) {
-            inject_option(call_expr, "props", Expr::Object(prop_types));
+        let props_types = self.extract_props_type(maybe_setup);
+        let emits_types = self.extract_emits_type(maybe_setup);
+        if let Some(prop_types) = props_types {
+            inject_define_component_option(call_expr, "props", Expr::Object(prop_types));
+        }
+        if let Some(emits_type) = emits_types {
+            inject_define_component_option(call_expr, "emits", Expr::Array(emits_type));
         }
     }
 
@@ -1443,7 +1448,7 @@ where
             return;
         }
 
-        inject_option(
+        inject_define_component_option(
             call,
             "name",
             Expr::Lit(Lit::Str(quote_str!(name.sym.clone()))),
@@ -1451,7 +1456,7 @@ where
     }
 }
 
-fn inject_option(call: &mut CallExpr, name: &'static str, value: Expr) {
+fn inject_define_component_option(call: &mut CallExpr, name: &'static str, value: Expr) {
     let options = call.args.get_mut(1);
     if options
         .as_ref()

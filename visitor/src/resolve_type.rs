@@ -5,7 +5,7 @@ use swc_core::{
     ecma::{
         ast::*,
         atoms::{js_word, JsWord},
-        utils::quote_ident,
+        utils::{quote_ident, quote_str},
     },
     plugin::errors::HANDLER,
 };
@@ -14,6 +14,7 @@ enum RefinedTsTypeElement {
     Property(TsPropertySignature),
     GetterSignature(TsGetterSignature),
     MethodSignature(TsMethodSignature),
+    CallSignature(TsCallSignatureDecl),
 }
 
 struct PropIr {
@@ -55,7 +56,7 @@ where
 
     fn build_props_type(&self, TsTypeAnn { type_ann, .. }: &TsTypeAnn) -> ObjectLit {
         let mut props = Vec::with_capacity(3);
-        self.resolve_props(type_ann, &mut props);
+        self.resolve_type_elements(type_ann, &mut props);
 
         let cap = props.len();
         let irs = props.into_iter().fold(
@@ -130,6 +131,7 @@ where
                             );
                         }
                     }
+                    RefinedTsTypeElement::CallSignature(..) => {}
                 }
                 irs
             },
@@ -190,7 +192,7 @@ where
         }
     }
 
-    fn resolve_props(&self, ty: &TsType, props: &mut Vec<RefinedTsTypeElement>) {
+    fn resolve_type_elements(&self, ty: &TsType, props: &mut Vec<RefinedTsTypeElement>) {
         match ty {
             TsType::TsTypeLit(TsTypeLit { members, .. }) => {
                 props.extend(members.iter().filter_map(|member| match member {
@@ -203,6 +205,9 @@ where
                     TsTypeElement::TsGetterSignature(getter) => {
                         Some(RefinedTsTypeElement::GetterSignature(getter.clone()))
                     }
+                    TsTypeElement::TsCallSignatureDecl(call) => {
+                        Some(RefinedTsTypeElement::CallSignature(call.clone()))
+                    }
                     _ => None,
                 }));
             }
@@ -210,7 +215,9 @@ where
                 TsUnionOrIntersectionType::TsIntersectionType(TsIntersectionType { types, .. })
                 | TsUnionOrIntersectionType::TsUnionType(TsUnionType { types, .. }),
             ) => {
-                types.iter().for_each(|ty| self.resolve_props(ty, props));
+                types
+                    .iter()
+                    .for_each(|ty| self.resolve_type_elements(ty, props));
             }
             TsType::TsTypeRef(TsTypeRef {
                 type_name: TsEntityName::Ident(ident),
@@ -220,7 +227,7 @@ where
             }) => {
                 let key = (ident.sym.clone(), ident.span.ctxt());
                 if let Some(aliased) = self.type_aliases.get(&key) {
-                    self.resolve_props(aliased, props);
+                    self.resolve_type_elements(aliased, props);
                 } else if let Some(TsInterfaceDecl {
                     extends,
                     body: TsInterfaceBody { body, .. },
@@ -237,13 +244,16 @@ where
                         TsTypeElement::TsGetterSignature(getter) => {
                             Some(RefinedTsTypeElement::GetterSignature(getter.clone()))
                         }
+                        TsTypeElement::TsCallSignatureDecl(call) => {
+                            Some(RefinedTsTypeElement::CallSignature(call.clone()))
+                        }
                         _ => None,
                     }));
                     extends
                         .iter()
                         .filter_map(|parent| parent.expr.as_ident())
                         .for_each(|ident| {
-                            self.resolve_props(
+                            self.resolve_type_elements(
                                 &TsType::TsTypeRef(TsTypeRef {
                                     type_name: TsEntityName::Ident(ident.clone()),
                                     type_params: None,
@@ -260,7 +270,7 @@ where
                                 .and_then(|params| params.params.first())
                             {
                                 let mut inner_props = vec![];
-                                self.resolve_props(param, &mut inner_props);
+                                self.resolve_type_elements(param, &mut inner_props);
                                 props.extend(inner_props.into_iter().map(|mut prop| {
                                     match &mut prop {
                                         RefinedTsTypeElement::Property(property) => {
@@ -272,6 +282,7 @@ where
                                         RefinedTsTypeElement::GetterSignature(getter) => {
                                             getter.optional = true;
                                         }
+                                        RefinedTsTypeElement::CallSignature(..) => {}
                                     }
                                     prop
                                 }));
@@ -283,7 +294,7 @@ where
                                 .and_then(|params| params.params.first())
                             {
                                 let mut inner_props = vec![];
-                                self.resolve_props(param, &mut inner_props);
+                                self.resolve_type_elements(param, &mut inner_props);
                                 props.extend(inner_props.into_iter().map(|mut prop| {
                                     match &mut prop {
                                         RefinedTsTypeElement::Property(TsPropertySignature {
@@ -298,6 +309,7 @@ where
                                         ) => {
                                             *optional = false;
                                         }
+                                        RefinedTsTypeElement::CallSignature(..) => {}
                                     }
                                     prop
                                 }));
@@ -308,9 +320,9 @@ where
                                 .as_deref()
                                 .and_then(|params| params.params.first().zip(params.params.get(1)))
                             {
-                                let keys = self.resolve_index_keys(keys);
+                                let keys = self.resolve_string_or_union_strings(keys);
                                 let mut inner_props = vec![];
-                                self.resolve_props(object, &mut inner_props);
+                                self.resolve_type_elements(object, &mut inner_props);
                                 props.extend(inner_props.into_iter().filter(|prop| match prop {
                                     RefinedTsTypeElement::Property(TsPropertySignature {
                                         key,
@@ -328,6 +340,7 @@ where
                                         Expr::Lit(Lit::Str(str)) => keys.contains(&str.value),
                                         _ => false,
                                     },
+                                    RefinedTsTypeElement::CallSignature(..) => false,
                                 }));
                             }
                         }
@@ -336,9 +349,9 @@ where
                                 .as_deref()
                                 .and_then(|params| params.params.first().zip(params.params.get(1)))
                             {
-                                let keys = self.resolve_index_keys(keys);
+                                let keys = self.resolve_string_or_union_strings(keys);
                                 let mut inner_props = vec![];
-                                self.resolve_props(object, &mut inner_props);
+                                self.resolve_type_elements(object, &mut inner_props);
                                 props.extend(inner_props.into_iter().filter(|prop| match prop {
                                     RefinedTsTypeElement::Property(TsPropertySignature {
                                         key,
@@ -356,6 +369,7 @@ where
                                         Expr::Lit(Lit::Str(str)) => !keys.contains(&str.value),
                                         _ => true,
                                     },
+                                    RefinedTsTypeElement::CallSignature(..) => true,
                                 }));
                             }
                         }
@@ -380,16 +394,29 @@ where
                 ..
             }) => {
                 if let Some(ty) = self.resolve_indexed_access(obj_type, index_type) {
-                    self.resolve_props(&ty, props);
+                    self.resolve_type_elements(&ty, props);
                 } else {
                     HANDLER.with(|handler| {
                         handler.span_err(ty.span(), "Unresolvable type.");
                     });
                 }
             }
+            TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(TsFnType {
+                params,
+                type_params,
+                type_ann,
+                ..
+            })) => {
+                props.push(RefinedTsTypeElement::CallSignature(TsCallSignatureDecl {
+                    params: params.clone(),
+                    type_ann: Some(type_ann.clone()),
+                    type_params: type_params.clone(),
+                    span: DUMMY_SP,
+                }));
+            }
             TsType::TsParenthesizedType(TsParenthesizedType { type_ann, .. })
             | TsType::TsOptionalType(TsOptionalType { type_ann, .. }) => {
-                self.resolve_props(type_ann, props);
+                self.resolve_type_elements(type_ann, props);
             }
             _ => HANDLER.with(|handler| {
                 handler.span_err(ty.span(), "Unresolvable type.");
@@ -397,7 +424,7 @@ where
         }
     }
 
-    fn resolve_index_keys(&self, ty: &TsType) -> Vec<JsWord> {
+    fn resolve_string_or_union_strings(&self, ty: &TsType) -> Vec<JsWord> {
         match ty {
             TsType::TsLitType(TsLitType {
                 lit: TsLit::Str(key),
@@ -407,9 +434,18 @@ where
                 TsUnionType { types, .. },
             )) => types
                 .iter()
-                .filter_map(|ty| ty.as_ts_lit_type().and_then(|lit| lit.lit.as_str()))
-                .map(|str| str.value.clone())
-                .collect(),
+                .fold(Vec::with_capacity(types.len()), |mut strings, ty| {
+                    if let TsType::TsLitType(TsLitType {
+                        lit: TsLit::Str(str),
+                        ..
+                    }) = &**ty
+                    {
+                        strings.push(str.value.clone());
+                    } else {
+                        strings.extend_from_slice(&self.resolve_string_or_union_strings(ty));
+                    }
+                    strings
+                }),
             TsType::TsTypeRef(TsTypeRef {
                 type_name: TsEntityName::Ident(ident),
                 ..
@@ -418,7 +454,7 @@ where
                     .type_aliases
                     .get(&(ident.sym.clone(), ident.span.ctxt()))
                 {
-                    self.resolve_index_keys(aliased)
+                    self.resolve_string_or_union_strings(aliased)
                 } else if ident.span.ctxt().has_mark(self.unresolved_mark) {
                     HANDLER.with(|handler| {
                         handler.span_err(
@@ -502,7 +538,7 @@ where
                             TsUnionOrIntersectionType::TsUnionType(..),
                         )
                         | TsType::TsTypeRef(..) => {
-                            let keys = self.resolve_index_keys(index);
+                            let keys = self.resolve_string_or_union_strings(index);
                             interface
                                 .body
                                 .body
@@ -633,7 +669,7 @@ where
                     | TsType::TsUnionOrIntersectionType(TsUnionOrIntersectionType::TsUnionType(
                         ..,
                     )) => {
-                        let keys = self.resolve_index_keys(index);
+                        let keys = self.resolve_string_or_union_strings(index);
                         members
                             .iter()
                             .filter_map(|member| match member {
@@ -899,6 +935,91 @@ where
             }
         };
         runtime_types
+    }
+
+    pub(crate) fn extract_emits_type(&self, setup_fn: &ExprOrSpread) -> Option<ArrayLit> {
+        let Some(TsTypeAnn {
+            type_ann: second_param_type,
+            ..
+        }) = (if let ExprOrSpread { expr, spread: None } = setup_fn {
+            match &**expr {
+                Expr::Arrow(arrow) => match arrow.params.get(1) {
+                    Some(Pat::Ident(ident)) => ident.type_ann.as_deref(),
+                    Some(Pat::Array(array)) => array.type_ann.as_deref(),
+                    Some(Pat::Object(object)) => object.type_ann.as_deref(),
+                    _ => return None,
+                },
+                Expr::Fn(fn_expr) => match fn_expr.function.params.get(1).map(|param| &param.pat) {
+                    Some(Pat::Ident(ident)) => ident.type_ann.as_deref(),
+                    Some(Pat::Array(array)) => array.type_ann.as_deref(),
+                    Some(Pat::Object(object)) => object.type_ann.as_deref(),
+                    _ => return None,
+                },
+                _ => return None,
+            }
+        } else {
+            return None;
+        })
+        else {
+            return None;
+        };
+
+        match &**second_param_type {
+            TsType::TsTypeRef(TsTypeRef {
+                type_name: TsEntityName::Ident(ident),
+                type_params: Some(type_params),
+                ..
+            }) if ident.sym == "SetupContext" => {
+                if let Some(emits_def) = type_params.params.first() {
+                    let mut emits = Vec::with_capacity(1);
+                    self.resolve_type_elements(emits_def, &mut emits);
+                    Some(ArrayLit {
+                        elems: emits
+                            .into_iter()
+                            .flat_map(|emit| match emit {
+                                RefinedTsTypeElement::MethodSignature(TsMethodSignature {
+                                    key,
+                                    ..
+                                })
+                                | RefinedTsTypeElement::Property(TsPropertySignature {
+                                    key, ..
+                                }) => match &*key {
+                                    Expr::Ident(ident) => vec![ident.sym.clone()],
+                                    Expr::Lit(Lit::Str(str)) => vec![str.value.clone()],
+                                    _ => vec![],
+                                },
+                                RefinedTsTypeElement::CallSignature(TsCallSignatureDecl {
+                                    params,
+                                    ..
+                                }) => params
+                                    .first()
+                                    .and_then(|param| match param {
+                                        TsFnParam::Ident(ident) => ident.type_ann.as_deref(),
+                                        TsFnParam::Array(array) => array.type_ann.as_deref(),
+                                        TsFnParam::Rest(rest) => rest.type_ann.as_deref(),
+                                        TsFnParam::Object(object) => object.type_ann.as_deref(),
+                                    })
+                                    .map(|type_ann| {
+                                        self.resolve_string_or_union_strings(&type_ann.type_ann)
+                                    })
+                                    .unwrap_or_default(),
+                                RefinedTsTypeElement::GetterSignature(..) => vec![],
+                            })
+                            .map(|name| {
+                                Some(ExprOrSpread {
+                                    expr: Box::new(Expr::Lit(Lit::Str(quote_str!(name)))),
+                                    spread: None,
+                                })
+                            })
+                            .collect(),
+                        span: DUMMY_SP,
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 }
 
