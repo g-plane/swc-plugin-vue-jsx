@@ -38,6 +38,7 @@ These options of official Babel plugin are supported:
 - `mergeProps`
 - `enableObjectSlots`
 - `pragma`
+- `resolveType` (Types imported from other modules aren't supported.)
 
 For details, please refer to official documentation.
 
