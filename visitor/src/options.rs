@@ -8,19 +8,11 @@ use std::{fmt, ops::Deref};
 #[serde(rename_all = "camelCase", default)]
 pub struct Options {
     pub transform_on: bool,
-
     pub optimize: bool,
-
     pub custom_element_patterns: Vec<Regex>,
-
-    #[serde(default = "default_true")]
     pub merge_props: bool,
-
-    #[serde(default = "default_true")]
     pub enable_object_slots: bool,
-
     pub pragma: Option<String>,
-
     pub resolve_type: bool,
 }
 
@@ -36,10 +28,6 @@ impl Default for Options {
             resolve_type: false,
         }
     }
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[derive(Clone, Debug)]
