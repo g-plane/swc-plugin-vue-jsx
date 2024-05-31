@@ -3,6 +3,12 @@
 SWC plugin for transforming Vue JSX, mostly ported from [official Babel plugin](https://github.com/vuejs/babel-plugin-jsx).
 It only supports Vue.js v3 or newer.
 
+## SWC Version
+| swc-plugin-vue-jsx | @swc/core |
+| ---- | ---- |
+| `0.4.0`| `1.5.0~` |
+| `0.3.0`| `1.3.107` |
+
 ## Installation
 
 ```
