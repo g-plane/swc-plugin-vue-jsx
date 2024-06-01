@@ -455,9 +455,12 @@ where
                                                 Expr::Assign(AssignExpr {
                                                     span: DUMMY_SP,
                                                     op: op!("="),
-                                                    left: PatOrExpr::Expr(Box::new(
-                                                        directive.value,
-                                                    )),
+                                                    left: AssignTarget::Simple(
+                                                        SimpleAssignTarget::Paren(ParenExpr {
+                                                            span: DUMMY_SP,
+                                                            expr: Box::new(directive.value)
+                                                        }),
+                                                    ),
                                                     right: Box::new(Expr::Ident(quote_ident!(
                                                         "$event"
                                                     ))),
@@ -786,9 +789,12 @@ where
                                     expr: Box::new(Expr::Assign(AssignExpr {
                                         span: DUMMY_SP,
                                         op: op!("="),
-                                        left: PatOrExpr::Expr(Box::new(Expr::Ident(
-                                            slot_ident.clone(),
-                                        ))),
+                                        left: AssignTarget::Simple(SimpleAssignTarget::Paren(
+                                            ParenExpr{
+                                                span: DUMMY_SP,
+                                                expr: Box::new(Expr::Ident(slot_ident.clone())),
+                                            }
+                                        )),
                                         right: Box::new(expr.clone()),
                                     })),
                                 }],
@@ -1287,10 +1293,10 @@ where
             Expr::JSXElement(jsx_element) => *expr = self.transform_jsx_element(jsx_element),
             Expr::JSXFragment(jsx_fragment) => *expr = self.transform_jsx_fragment(jsx_fragment),
             Expr::Assign(AssignExpr {
-                left: PatOrExpr::Pat(pat),
+                left: AssignTarget::Simple(simple_assign_target),
                 ..
             }) => {
-                if let Pat::Ident(binding_ident) = &**pat {
+                if let SimpleAssignTarget::Ident(binding_ident) = &*simple_assign_target {
                     self.assignment_left = Some(binding_ident.id.clone());
                 }
             }

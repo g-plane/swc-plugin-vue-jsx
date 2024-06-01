@@ -14,7 +14,7 @@ fnv = "1.0"
 indexmap = "2.1"
 regex = "1.10"
 serde = { version = "1.0", features = ["derive"] }
-swc_core = { version = "0.89", features = [
+swc_core = { version = "0.90", features = [
   "ecma_parser",
   "ecma_plugin_transform",
   "ecma_utils",
