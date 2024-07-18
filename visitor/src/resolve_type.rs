@@ -228,7 +228,6 @@ where
                             );
                         }
                     }
-
                     RefinedTsTypeElement::GetterSignature(TsGetterSignature {
                         key,
                         computed,
