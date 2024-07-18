@@ -201,13 +201,6 @@ where
                         optional,
                         type_ann,
                         ..
-                    })
-                    | RefinedTsTypeElement::GetterSignature(TsGetterSignature {
-                        key,
-                        computed,
-                        optional,
-                        type_ann,
-                        ..
                     }) => {
                         let prop_name = extract_prop_name(*key, computed);
                         let types = if let Some(type_ann) = type_ann {
@@ -231,6 +224,36 @@ where
                                 PropIr {
                                     types,
                                     required: !optional,
+                                },
+                            );
+                        }
+                    }
+
+                    RefinedTsTypeElement::GetterSignature(TsGetterSignature {
+                        key,
+                        computed,
+                        type_ann,
+                        ..
+                    }) => {
+                        let prop_name = extract_prop_name(*key, computed);
+                        let types = if let Some(type_ann) = type_ann {
+                            self.infer_runtime_type(&type_ann.type_ann)
+                        } else {
+                            let mut types = IndexSet::with_capacity(1);
+                            types.insert(None);
+                            types
+                        };
+                        if let Some((_, ir)) = irs
+                            .iter_mut()
+                            .find(|(key, _)| prop_name.eq_ignore_span(key))
+                        {
+                            ir.types.extend(types);
+                        } else {
+                            irs.insert(
+                                prop_name,
+                                PropIr {
+                                    types,
+                                    required: true,
                                 },
                             );
                         }
@@ -377,7 +400,7 @@ where
                 span,
                 ..
             }) => {
-                let key = (ident.sym.clone(), ident.span.ctxt());
+                let key = (ident.sym.clone(), ident.ctxt);
                 if let Some(aliased) = self.type_aliases.get(&key) {
                     self.resolve_type_elements(aliased, props);
                 } else if let Some(TsInterfaceDecl {
@@ -453,13 +476,11 @@ where
                                         })
                                         | RefinedTsTypeElement::MethodSignature(
                                             TsMethodSignature { optional, .. },
-                                        )
-                                        | RefinedTsTypeElement::GetterSignature(
-                                            TsGetterSignature { optional, .. },
                                         ) => {
                                             *optional = false;
                                         }
-                                        RefinedTsTypeElement::CallSignature(..) => {}
+                                        RefinedTsTypeElement::GetterSignature(..)
+                                        | RefinedTsTypeElement::CallSignature(..) => {}
                                     }
                                     prop
                                 }));
@@ -758,7 +779,7 @@ where
                             }),
                         ))
                     }
-                } else if ident.span.ctxt().has_mark(self.unresolved_mark) {
+                } else if ident.ctxt.has_mark(self.unresolved_mark) {
                     if ident.sym == "Array" {
                         type_params
                             .as_ref()
@@ -803,7 +824,7 @@ where
                             }) => type_ann.as_ref().map(|type_ann| type_ann.type_ann.clone()),
                             TsTypeElement::TsMethodSignature(..) => {
                                 Some(Box::new(TsType::TsTypeRef(TsTypeRef {
-                                    type_name: TsEntityName::Ident(quote_ident!("Function")),
+                                    type_name: TsEntityName::Ident(quote_ident!("Function").into()),
                                     type_params: None,
                                     span: DUMMY_SP,
                                 })))
@@ -854,9 +875,9 @@ where
                                     {
                                         if keys.contains(key) {
                                             Some(Box::new(TsType::TsTypeRef(TsTypeRef {
-                                                type_name: TsEntityName::Ident(quote_ident!(
-                                                    "Function"
-                                                )),
+                                                type_name: TsEntityName::Ident(
+                                                    quote_ident!("Function").into(),
+                                                ),
                                                 type_params: None,
                                                 span: DUMMY_SP,
                                             })))
@@ -990,7 +1011,7 @@ where
                 type_params,
                 ..
             }) => {
-                let key = (ident.sym.clone(), ident.span.ctxt());
+                let key = (ident.sym.clone(), ident.ctxt);
                 if let Some(aliased) = self.type_aliases.get(&key) {
                     runtime_types.extend(self.infer_runtime_type(aliased));
                 } else if let Some(TsInterfaceDecl {
@@ -1174,7 +1195,7 @@ where
 
 fn extract_prop_name(expr: Expr, computed: bool) -> PropName {
     match expr {
-        Expr::Ident(ident) => PropName::Ident(ident),
+        Expr::Ident(ident) => PropName::Ident(ident.into()),
         Expr::Lit(Lit::Str(str)) => PropName::Str(str),
         Expr::Lit(Lit::Num(num)) => PropName::Num(num),
         Expr::Lit(Lit::BigInt(bigint)) => PropName::BigInt(bigint),
@@ -1198,7 +1219,7 @@ fn try_unwrap_lit_prop_name(prop_name: &PropName) -> Option<Cow<PropName>> {
             Some(Cow::Borrowed(prop_name))
         }
         PropName::Computed(ComputedPropName { expr, .. }) => match &**expr {
-            Expr::Ident(ident) => Some(Cow::Owned(PropName::Ident(ident.clone()))),
+            Expr::Ident(ident) => Some(Cow::Owned(PropName::Ident(ident.clone().into()))),
             Expr::Lit(Lit::Str(str)) => Some(Cow::Owned(PropName::Str(str.clone()))),
             Expr::Lit(Lit::Num(num)) => Some(Cow::Owned(PropName::Num(num.clone()))),
             Expr::Lit(Lit::BigInt(bigint)) => Some(Cow::Owned(PropName::BigInt(bigint.clone()))),
