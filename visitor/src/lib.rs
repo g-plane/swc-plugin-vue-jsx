@@ -163,7 +163,7 @@ where
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(self.get_pragma()))),
             args: vnode_call_args,
-            type_args: None,
+            ..Default::default()
         });
 
         if directives.is_empty() {
@@ -224,7 +224,7 @@ where
                         })),
                     },
                 ],
-                type_args: None,
+                ..Default::default()
             })
         }
     }
@@ -251,7 +251,7 @@ where
                     expr: Box::new(self.transform_children(&jsx_fragment.children, false, None)),
                 },
             ],
-            type_args: None,
+            ..Default::default()
         })
     }
 
@@ -284,7 +284,7 @@ where
                             spread: None,
                             expr: Box::new(Expr::Lit(Lit::Str(quote_str!(name)))),
                         }],
-                        type_args: None,
+                        ..Default::default()
                     })
                 } else {
                     Expr::Ident(ident.clone())
@@ -448,7 +448,7 @@ where
                                         value: Box::new(Expr::Arrow(ArrowExpr {
                                             span: DUMMY_SP,
                                             params: vec![Pat::Ident(BindingIdent {
-                                                id: quote_ident!("$event"),
+                                                id: quote_ident!("$event").into(),
                                                 type_ann: None,
                                             })],
                                             body: Box::new(BlockStmtOrExpr::Expr(Box::new(
@@ -458,18 +458,17 @@ where
                                                     left: AssignTarget::Simple(
                                                         SimpleAssignTarget::Paren(ParenExpr {
                                                             span: DUMMY_SP,
-                                                            expr: Box::new(directive.value)
+                                                            expr: Box::new(directive.value),
                                                         }),
                                                     ),
-                                                    right: Box::new(Expr::Ident(quote_ident!(
-                                                        "$event"
-                                                    ))),
+                                                    right: Box::new(Expr::Ident(
+                                                        quote_ident!("$event").into(),
+                                                    )),
                                                 }),
                                             ))),
                                             is_async: false,
                                             is_generator: false,
-                                            type_params: None,
-                                            return_type: None,
+                                            ..Default::default()
                                         })),
                                     },
                                 ))));
@@ -557,7 +556,7 @@ where
                                     spread: None,
                                     expr: attr_value,
                                 }],
-                                type_args: None,
+                                ..Default::default()
                             }));
                         } else {
                             props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
@@ -618,7 +617,7 @@ where
                             expr: Box::new(expr),
                         })
                         .collect(),
-                    type_args: None,
+                    ..Default::default()
                 }),
             }
         } else if !props.is_empty() {
@@ -764,7 +763,7 @@ where
                                     spread: None,
                                     expr: Box::new(expr.clone()),
                                 }],
-                                type_args: None,
+                                ..Default::default()
                             })),
                             cons: Box::new(expr.clone()),
                             alt: Box::new(self.wrap_children(elems, slot_flag, slots)),
@@ -790,15 +789,15 @@ where
                                         span: DUMMY_SP,
                                         op: op!("="),
                                         left: AssignTarget::Simple(SimpleAssignTarget::Paren(
-                                            ParenExpr{
+                                            ParenExpr {
                                                 span: DUMMY_SP,
                                                 expr: Box::new(Expr::Ident(slot_ident.clone())),
-                                            }
+                                            },
                                         )),
                                         right: Box::new(expr.clone()),
                                     })),
                                 }],
-                                type_args: None,
+                                ..Default::default()
                             })),
                             cons: Box::new(Expr::Ident(slot_ident.clone())),
                             alt: {
@@ -878,8 +877,7 @@ where
                 })))),
                 is_async: false,
                 is_generator: false,
-                type_params: None,
-                return_type: None,
+                ..Default::default()
             })),
         })))];
 
@@ -946,7 +944,7 @@ where
                     spread: None,
                     expr: Box::new(Expr::Lit(Lit::Str(quote_str!(text)))),
                 }],
-                type_args: None,
+                ..Default::default()
             }))
         }
     }
@@ -997,7 +995,7 @@ where
                     spread: None,
                     expr: Box::new(Expr::Lit(Lit::Str(quote_str!(directive_name)))),
                 }],
-                type_args: None,
+                ..Default::default()
             }),
         }
     }
@@ -1033,7 +1031,7 @@ where
         self.pragma
             .as_ref()
             .or(self.options.pragma.as_ref())
-            .map(|name| quote_ident!(name.as_str()))
+            .map(|name| quote_ident!(name.as_str()).into())
             .unwrap_or_else(|| self.import_from_vue("createVNode"))
     }
 
@@ -1085,15 +1083,15 @@ where
                                                     span: DUMMY_SP,
                                                     arg: Some(Box::new(Expr::Ident(ident))),
                                                 })],
+                                                ..Default::default()
                                             }),
                                             is_generator: false,
                                             is_async: false,
-                                            type_params: None,
-                                            return_type: None,
+                                            ..Default::default()
                                         }),
                                     }))),
                                     args: vec![],
-                                    type_args: None,
+                                    ..Default::default()
                                 }))),
                                 definite: false,
                             });
@@ -1121,7 +1119,7 @@ where
             .and_then(|expr| expr.as_ident())
             .and_then(|ident| {
                 self.define_component
-                    .map(|ctxt| ctxt == ident.span.ctxt() && ident.sym == "defineComponent")
+                    .map(|ctxt| ctxt == ident.ctxt && ident.sym == "defineComponent")
             })
             .unwrap_or_default()
     }
@@ -1146,8 +1144,8 @@ where
                 ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                     span: DUMMY_SP,
                     kind: VarDeclKind::Const,
-                    declare: false,
                     decls: mem::take(&mut self.injecting_consts),
+                    ..Default::default()
                 })))),
             );
         }
@@ -1158,8 +1156,8 @@ where
                 ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                     span: DUMMY_SP,
                     kind: VarDeclKind::Let,
-                    declare: false,
                     decls: mem::take(&mut self.injecting_vars),
+                    ..Default::default()
                 })))),
             );
             self.slot_counter = 1;
@@ -1204,7 +1202,9 @@ where
                             ImportSpecifier::Named(ImportNamedSpecifier {
                                 span: DUMMY_SP,
                                 local: local.clone(),
-                                imported: Some(ModuleExportName::Ident(quote_ident!(*imported))),
+                                imported: Some(ModuleExportName::Ident(
+                                    quote_ident!(*imported).into(),
+                                )),
                                 is_type_only: false,
                             })
                         })
@@ -1227,8 +1227,8 @@ where
                 Stmt::Decl(Decl::Var(Box::new(VarDecl {
                     span: DUMMY_SP,
                     kind: VarDeclKind::Const,
-                    declare: false,
                     decls: mem::take(&mut self.injecting_consts),
+                    ..Default::default()
                 }))),
             );
         }
@@ -1239,8 +1239,8 @@ where
                 Stmt::Decl(Decl::Var(Box::new(VarDecl {
                     span: DUMMY_SP,
                     kind: VarDeclKind::Let,
-                    declare: false,
                     decls: mem::take(&mut self.injecting_vars),
+                    ..Default::default()
                 }))),
             );
             self.slot_counter = 1;
@@ -1258,8 +1258,8 @@ where
                     stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                         span: DUMMY_SP,
                         kind: VarDeclKind::Const,
-                        declare: false,
                         decls: mem::take(&mut self.injecting_consts),
+                        ..Default::default()
                     }))));
                 }
 
@@ -1267,8 +1267,8 @@ where
                     stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                         span: DUMMY_SP,
                         kind: VarDeclKind::Let,
-                        declare: false,
                         decls: mem::take(&mut self.injecting_vars),
+                        ..Default::default()
                     }))));
                     self.slot_counter = 1;
                 }
@@ -1281,6 +1281,7 @@ where
                 arrow_expr.body = Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                     span: DUMMY_SP,
                     stmts,
+                    ..Default::default()
                 }));
             }
         }
@@ -1315,7 +1316,7 @@ where
                 .enumerate()
                 .find_map(|(i, jsx_attr_or_spread)| match jsx_attr_or_spread {
                     JSXAttrOrSpread::JSXAttr(JSXAttr {
-                        name: JSXAttrName::Ident(Ident { sym, .. }),
+                        name: JSXAttrName::Ident(IdentName { sym, .. }),
                         ..
                     }) if sym == "v-models" => Some(i),
                     _ => None,
@@ -1372,7 +1373,7 @@ where
                 ..
             }) = specifier
             {
-                (local.sym == "defineComponent").then_some(local.span.ctxt())
+                (local.sym == "defineComponent").then_some(local.ctxt)
             } else {
                 None
             }
@@ -1385,10 +1386,7 @@ where
     fn visit_mut_ts_interface_decl(&mut self, ts_interface_decl: &mut TsInterfaceDecl) {
         ts_interface_decl.visit_mut_children_with(self);
         if self.options.resolve_type {
-            let key = (
-                ts_interface_decl.id.sym.clone(),
-                ts_interface_decl.id.span.ctxt(),
-            );
+            let key = (ts_interface_decl.id.sym.clone(), ts_interface_decl.id.ctxt);
             if let Some(interface) = self.interfaces.get_mut(&key) {
                 interface
                     .body
@@ -1406,7 +1404,7 @@ where
             self.type_aliases.insert(
                 (
                     ts_type_alias_decl.id.sym.clone(),
-                    ts_type_alias_decl.id.span.ctxt(),
+                    ts_type_alias_decl.id.ctxt,
                 ),
                 (*ts_type_alias_decl.type_ann).clone(),
             );

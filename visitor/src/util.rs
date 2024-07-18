@@ -64,7 +64,7 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
                                         spread: None,
                                         expr: Box::new(Expr::Ident(arg.clone())),
                                     }],
-                                    type_args: None,
+                                    ..Default::default()
                                 })),
                                 right: Box::new(Expr::Lit(Lit::Str(quote_str!("[object Object]")))),
                             })),
@@ -78,17 +78,17 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
                                         spread: None,
                                         expr: Box::new(Expr::Ident(arg)),
                                     }],
-                                    type_args: None,
+                                    ..Default::default()
                                 })),
                             })),
                         })),
                     }))),
                 })],
+                ..Default::default()
             }),
             is_generator: false,
             is_async: false,
-            type_params: None,
-            return_type: None,
+            ..Default::default()
         }),
     }
 }
@@ -247,6 +247,7 @@ pub(crate) fn decouple_v_models(
                 span: DUMMY_SP,
                 name: if let Some(argument) = argument {
                     JSXAttrName::JSXNamespacedName(JSXNamespacedName {
+                        span: DUMMY_SP,
                         ns: quote_ident!("v-model"),
                         name: quote_ident!(argument),
                     })
