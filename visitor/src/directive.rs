@@ -53,7 +53,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
                 splitted,
             )
         }
-        JSXAttrName::JSXNamespacedName(JSXNamespacedName { ns, name }) => {
+        JSXAttrName::JSXNamespacedName(JSXNamespacedName { ns, name, .. }) => {
             let mut splitted = name.sym.split('_');
             (
                 ns.sym
@@ -87,7 +87,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
         if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
             value = match elems.get(0) {
                 Some(Some(ExprOrSpread { spread: None, expr })) => (**expr).clone(),
-                _ => Expr::Ident(quote_ident!("")),
+                _ => Expr::Ident(quote_ident!("").into()),
             };
             if let Some(Some(ExprOrSpread { spread: None, expr })) = elems.get(1) {
                 match &**expr {
@@ -114,7 +114,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
         }
     } else {
         modifiers = Some(splitted.map(JsWord::from).collect());
-        value = Expr::Ident(quote_ident!(""));
+        value = Expr::Ident(quote_ident!("").into());
     }
 
     Directive::Normal(NormalDirective {
@@ -240,7 +240,7 @@ fn parse_v_model_directive(
                     "You have to use JSX Expression inside your `v-model`.",
                 );
             });
-            Expr::Ident(quote_ident!(""))
+            Expr::Ident(quote_ident!("").into())
         }
     };
 
@@ -250,7 +250,7 @@ fn parse_v_model_directive(
     if let Expr::Array(ArrayLit { elems, .. }) = attr_value {
         value = match elems.get(0) {
             Some(Some(ExprOrSpread { spread: None, expr })) => (**expr).clone(),
-            _ => Expr::Ident(quote_ident!("")),
+            _ => Expr::Ident(quote_ident!("").into()),
         };
         if let Some(Some(ExprOrSpread { spread: None, expr })) = elems.get(1) {
             match &**expr {

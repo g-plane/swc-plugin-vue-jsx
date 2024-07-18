@@ -78,7 +78,7 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
                                         spread: None,
                                         expr: Box::new(Expr::Ident(arg)),
                                     }],
-                                    type_args: None,
+                                    ..Default::default()
                                 })),
                             })),
                         })),
@@ -87,8 +87,7 @@ pub(crate) fn build_slot_helper(helper_name: Ident, is_vnode: Ident) -> FnDecl {
             }),
             is_generator: false,
             is_async: false,
-            type_params: None,
-            return_type: None,
+            ..Default::default()
         }),
     }
 }
