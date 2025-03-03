@@ -1,10 +1,10 @@
 use std::{fs, io::ErrorKind, path::PathBuf};
 use swc_core::{
-    common::{chain, Mark},
+    common::Mark,
     ecma::{
-        parser::{EsConfig, Syntax, TsConfig},
+        parser::{EsSyntax, Syntax, TsSyntax},
         transforms::{base::resolver, testing::test_fixture},
-        visit::as_folder,
+        visit::visit_mut_pass,
     },
 };
 use swc_vue_jsx_visitor::{Options, VueJsxTransformVisitor};
@@ -27,28 +27,28 @@ fn test(input: PathBuf) {
         .map(|ext| ext.to_string_lossy())
         .map(|ext| &*ext == "tsx")
         .unwrap_or_default();
-
+    
     test_fixture(
         if is_ts {
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 tsx: true,
                 ..Default::default()
             })
         } else {
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 jsx: true,
                 ..Default::default()
             })
         },
         &|tester| {
             let unresolved_mark = Mark::new();
-            chain!(
+            (
                 resolver(unresolved_mark, Mark::new(), is_ts),
-                as_folder(VueJsxTransformVisitor::new(
+                visit_mut_pass(VueJsxTransformVisitor::new(
                     config.clone(),
                     unresolved_mark,
-                    Some(tester.comments.clone())
-                ))
+                    Some(tester.comments.clone()),
+                )),
             )
         },
         &input,

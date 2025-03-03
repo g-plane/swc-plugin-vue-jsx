@@ -1,10 +1,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use swc_core::{
-    ecma::{
-        ast::Program,
-        visit::{as_folder, FoldWith},
-    },
+    ecma::{ast::Program, visit::{FoldWith, visit_mut_pass}},
     plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 use swc_vue_jsx_visitor::VueJsxTransformVisitor;
@@ -17,7 +14,7 @@ pub fn vue_jsx(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
             serde_json::from_str(&json).expect("failed to parse config of plugin 'vue-jsx'")
         })
         .unwrap_or_default();
-    program.fold_with(&mut as_folder(VueJsxTransformVisitor::new(
+    program.apply(visit_mut_pass(&mut VueJsxTransformVisitor::new(
         options,
         metadata.unresolved_mark,
         metadata.comments,
