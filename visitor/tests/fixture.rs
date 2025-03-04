@@ -3,7 +3,10 @@ use swc_core::{
     common::Mark,
     ecma::{
         parser::{EsSyntax, Syntax, TsSyntax},
-        transforms::{base::resolver, testing::test_fixture},
+        transforms::{
+            base::resolver,
+            testing::{test_fixture, FixtureTestConfig},
+        },
         visit::visit_mut_pass,
     },
 };
@@ -27,7 +30,7 @@ fn test(input: PathBuf) {
         .map(|ext| ext.to_string_lossy())
         .map(|ext| &*ext == "tsx")
         .unwrap_or_default();
-    
+
     test_fixture(
         if is_ts {
             Syntax::Typescript(TsSyntax {
@@ -53,6 +56,9 @@ fn test(input: PathBuf) {
         },
         &input,
         &output,
-        Default::default(),
+        FixtureTestConfig {
+            module: Some(true),
+            ..Default::default()
+        },
     )
 }

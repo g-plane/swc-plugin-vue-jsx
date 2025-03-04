@@ -1,7 +1,7 @@
 {
   "name": "swc-plugin-vue-jsx",
   "description": "SWC plugin for transforming Vue JSX.",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "author": "Pig Fang <g-plane@hotmail.com>",
   "repository": "g-plane/swc-plugin-vue-jsx",
   "license": "MIT",
@@ -24,14 +24,12 @@
   },
   "devDependencies": {
     "@gplane/tsconfig": "^6.1.0",
-    "@swc/core": "^1.7.0",
-    "@types/node": "^20.14.11",
+    "@swc/core": "1.10.18",
     "dprint": "^0.47.2",
-    "typescript": "^5.5.3",
-    "vite": "^5.3.4",
-    "vitest": "^2.0.3"
+    "vite": "5.3.4",
+    "vitest": "2.0.3"
   },
   "peerDependencies": {
-    "@swc/core": "^1.7.0"
+    "@swc/core": "1.10.18"
   }
 }
