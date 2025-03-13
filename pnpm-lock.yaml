@@ -12,7 +12,7 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@swc/core':
-        specifier: 1.10.18
+        specifier: ^1.10.18
         version: 1.10.18
       '@types/node':
         specifier: ^20.14.11
@@ -24,10 +24,10 @@ importers:
         specifier: ^5.5.3
         version: 5.8.2
       vite:
-        specifier: 5.3.4
+        specifier: ^5.3.4
         version: 5.3.4(@types/node@20.14.11)
       vitest:
-        specifier: 2.0.3
+        specifier: ^2.0.3
         version: 2.0.3(@types/node@20.14.11)
 
 packages:
