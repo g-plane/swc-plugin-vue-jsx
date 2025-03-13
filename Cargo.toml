@@ -2,14 +2,6 @@
 members = ["plugin", "visitor"]
 resolver = "2"
 
-[profile.dev]
-opt-level = 0
-debug = true
-
-[profile.test]
-opt-level = 0
-debug = true
-
 [profile.release]
 opt-level = "s"
 strip = "symbols"
