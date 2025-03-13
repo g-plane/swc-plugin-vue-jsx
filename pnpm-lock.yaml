@@ -14,9 +14,15 @@ importers:
       '@swc/core':
         specifier: 1.10.18
         version: 1.10.18
+      '@types/node':
+        specifier: ^20.14.11
+        version: 20.14.11
       dprint:
         specifier: ^0.47.2
         version: 0.47.2
+      typescript:
+        specifier: ^5.5.3
+        version: 5.8.2
       vite:
         specifier: 5.3.4
         version: 5.3.4(@types/node@20.14.11)
@@ -580,6 +586,11 @@ packages:
     resolution: {integrity: sha512-q5nmENpTHgiPVd1cJDDc9cVoYN5x4vCvwT3FMilvKPKneCBZAxn2YWQjDF0UMcE9k0Cay1gBiDfTMU0g+mPMQA==}
     engines: {node: '>=14.0.0'}
 
+  typescript@5.8.2:
+    resolution: {integrity: sha512-aJn6wq13/afZp/jT9QZmwEjDqqvSGp1VT5GVg+f/t6/oVyrgXM6BY1h9BRh/O5p3PlUPAe+WuiEZOmb/49RqoQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
@@ -875,7 +886,6 @@ snapshots:
   '@types/node@20.14.11':
     dependencies:
       undici-types: 5.26.5
-    optional: true
 
   '@vitest/expect@2.0.3':
     dependencies:
@@ -1090,8 +1100,9 @@ snapshots:
 
   tinyspy@3.0.0: {}
 
-  undici-types@5.26.5:
-    optional: true
+  typescript@5.8.2: {}
+
+  undici-types@5.26.5: {}
 
   vite-node@2.0.3(@types/node@20.14.11):
     dependencies:
