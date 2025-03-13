@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@gplane/tsconfig": "^6.1.0",
-    "@swc/core": "^1.7.0",
+    "@swc/core": "^1.10.18",
     "@types/node": "^20.14.11",
     "dprint": "^0.47.2",
     "typescript": "^5.5.3",
@@ -32,6 +32,6 @@
     "vitest": "^2.0.3"
   },
   "peerDependencies": {
-    "@swc/core": "^1.7.0"
+    "@swc/core": "^1.10.18"
   }
 }
