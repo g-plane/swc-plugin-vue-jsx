@@ -1,7 +1,7 @@
 {
   "name": "swc-plugin-vue-jsx",
   "description": "SWC plugin for transforming Vue JSX.",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "author": "Pig Fang <g-plane@hotmail.com>",
   "repository": "g-plane/swc-plugin-vue-jsx",
   "license": "MIT",
