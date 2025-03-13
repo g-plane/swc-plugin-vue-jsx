@@ -85,7 +85,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
     })) = &jsx_attr.value
     {
         if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
-            value = match elems.get(0) {
+            value = match elems.first() {
                 Some(Some(ExprOrSpread { spread: None, expr })) => (**expr).clone(),
                 _ => Expr::Ident(quote_ident!("").into()),
             };
@@ -164,7 +164,7 @@ fn parse_v_text_directive(jsx_attr: &JSXAttr) -> Directive {
             ..
         })) => {
             if let Some(Some(ExprOrSpread { spread: None, expr })) =
-                expr.as_array().and_then(|array| array.elems.get(0))
+                expr.as_array().and_then(|array| array.elems.first())
             {
                 (**expr).clone()
             } else {
@@ -197,7 +197,7 @@ fn parse_v_html_directive(jsx_attr: &JSXAttr) -> Directive {
             ..
         })) => {
             if let Some(Some(ExprOrSpread { spread: None, expr })) =
-                expr.as_array().and_then(|array| array.elems.get(0))
+                expr.as_array().and_then(|array| array.elems.first())
             {
                 (**expr).clone()
             } else {
@@ -248,7 +248,7 @@ fn parse_v_model_directive(
     let value;
 
     if let Expr::Array(ArrayLit { elems, .. }) = attr_value {
-        value = match elems.get(0) {
+        value = match elems.first() {
             Some(Some(ExprOrSpread { spread: None, expr })) => (**expr).clone(),
             _ => Expr::Ident(quote_ident!("").into()),
         };

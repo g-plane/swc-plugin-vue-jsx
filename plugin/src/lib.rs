@@ -1,7 +1,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use swc_core::{
-    ecma::{ast::Program, visit::{FoldWith, visit_mut_pass}},
+    ecma::{ast::Program, visit::visit_mut_pass},
     plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 use swc_vue_jsx_visitor::VueJsxTransformVisitor;

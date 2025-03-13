@@ -1294,13 +1294,9 @@ where
             Expr::JSXElement(jsx_element) => *expr = self.transform_jsx_element(jsx_element),
             Expr::JSXFragment(jsx_fragment) => *expr = self.transform_jsx_fragment(jsx_fragment),
             Expr::Assign(AssignExpr {
-                left: AssignTarget::Simple(simple_assign_target),
+                left: AssignTarget::Simple(SimpleAssignTarget::Ident(binding_ident)),
                 ..
-            }) => {
-                if let SimpleAssignTarget::Ident(binding_ident) = &*simple_assign_target {
-                    self.assignment_left = Some(binding_ident.id.clone());
-                }
-            }
+            }) => self.assignment_left = Some(binding_ident.id.clone()),
             _ => {}
         }
     }

@@ -29,7 +29,7 @@ where
 {
     pub(crate) fn extract_props_type(&mut self, setup_fn: &ExprOrSpread) -> Option<Expr> {
         let mut defaults = None;
-        let Some(first_param_type) = (if let ExprOrSpread { expr, spread: None } = setup_fn {
+        let first_param_type = if let ExprOrSpread { expr, spread: None } = setup_fn {
             match &**expr {
                 Expr::Arrow(arrow) => arrow.params.first().and_then(|param| {
                     if let Pat::Assign(AssignPat { right, .. }) = param {
@@ -44,10 +44,8 @@ where
                     extract_type_ann_from_pat(&param.pat)
                 }),
                 _ => None,
-            }
+            }?
         } else {
-            None
-        }) else {
             return None;
         };
 
@@ -76,36 +74,32 @@ where
                                     }),
                                 )),
                                 Prop::KeyValue(KeyValueProp { key, value }) => {
-                                    let Some(key) = try_unwrap_lit_prop_name(key) else {
-                                        return None;
-                                    };
-                                    Some((
-                                        key,
-                                        if value.is_lit() {
-                                            (**value).clone()
-                                        } else {
-                                            Expr::Arrow(ArrowExpr {
-                                                params: vec![],
-                                                body: Box::new(BlockStmtOrExpr::Expr(
-                                                    value.clone(),
-                                                )),
-                                                is_async: false,
-                                                is_generator: false,
-                                                span: DUMMY_SP,
-                                                ..Default::default()
-                                            })
-                                        },
-                                    ))
+                                    try_unwrap_lit_prop_name(key).map(|key| {
+                                        (
+                                            key,
+                                            if value.is_lit() {
+                                                (**value).clone()
+                                            } else {
+                                                Expr::Arrow(ArrowExpr {
+                                                    params: vec![],
+                                                    body: Box::new(BlockStmtOrExpr::Expr(
+                                                        value.clone(),
+                                                    )),
+                                                    is_async: false,
+                                                    is_generator: false,
+                                                    span: DUMMY_SP,
+                                                    ..Default::default()
+                                                })
+                                            },
+                                        )
+                                    })
                                 }
                                 Prop::Getter(GetterProp {
                                     key,
                                     body: Some(body),
                                     ..
-                                }) => {
-                                    let Some(key) = try_unwrap_lit_prop_name(key) else {
-                                        return None;
-                                    };
-                                    Some((
+                                }) => try_unwrap_lit_prop_name(key).map(|key| {
+                                    (
                                         key,
                                         Expr::Arrow(ArrowExpr {
                                             params: vec![],
@@ -117,19 +111,18 @@ where
                                             span: DUMMY_SP,
                                             ..Default::default()
                                         }),
-                                    ))
-                                }
+                                    )
+                                }),
                                 Prop::Method(MethodProp { key, function }) => {
-                                    let Some(key) = try_unwrap_lit_prop_name(key) else {
-                                        return None;
-                                    };
-                                    Some((
-                                        key,
-                                        Expr::Fn(FnExpr {
-                                            ident: None,
-                                            function: function.clone(),
-                                        }),
-                                    ))
+                                    try_unwrap_lit_prop_name(key).map(|key| {
+                                        (
+                                            key,
+                                            Expr::Fn(FnExpr {
+                                                ident: None,
+                                                function: function.clone(),
+                                            }),
+                                        )
+                                    })
                                 }
                                 _ => None,
                             }
@@ -1107,10 +1100,10 @@ where
     }
 
     pub(crate) fn extract_emits_type(&self, setup_fn: &ExprOrSpread) -> Option<ArrayLit> {
-        let Some(TsTypeAnn {
+        let TsTypeAnn {
             type_ann: second_param_type,
             ..
-        }) = (if let ExprOrSpread { expr, spread: None } = setup_fn {
+        } = if let ExprOrSpread { expr, spread: None } = setup_fn {
             match &**expr {
                 Expr::Arrow(arrow) => match arrow.params.get(1) {
                     Some(Pat::Ident(ident)) => ident.type_ann.as_deref(),
@@ -1125,11 +1118,8 @@ where
                     _ => return None,
                 },
                 _ => return None,
-            }
+            }?
         } else {
-            return None;
-        })
-        else {
             return None;
         };
 
