@@ -14,12 +14,12 @@ fnv = "1.0"
 indexmap = "2.1"
 regex = "1.10"
 serde = { version = "1", features = ["derive"] }
-swc_core = { version = "14.0.1", features = [
+swc_core = { version = "14.0", features = [
   "ecma_parser",
   "ecma_plugin_transform",
   "ecma_utils",
 ] }
 
 [dev-dependencies]
-serde_json = "1"
-testing = "8.0.0"
+serde_json = "1.0"
+testing = "8.0"
