@@ -9,7 +9,7 @@ use swc_core::{
     common::{comments::Comments, Mark, Span, Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::*,
-        atoms::JsWord,
+        atoms::Atom,
         utils::{private_ident, quote_ident, quote_str},
         visit::{VisitMut, VisitMutWith},
     },
@@ -42,8 +42,8 @@ where
     transform_on_helper: Option<Ident>,
 
     define_component: Option<SyntaxContext>,
-    interfaces: FnvHashMap<(JsWord, SyntaxContext), TsInterfaceDecl>,
-    type_aliases: FnvHashMap<(JsWord, SyntaxContext), TsType>,
+    interfaces: FnvHashMap<(Atom, SyntaxContext), TsInterfaceDecl>,
+    type_aliases: FnvHashMap<(Atom, SyntaxContext), TsType>,
 
     unresolved_mark: Mark,
     comments: Option<C>,
@@ -410,7 +410,7 @@ where
                                     }
                                 } else {
                                     directives.push(NormalDirective {
-                                        name: JsWord::from("model"),
+                                        name: Atom::from("model"),
                                         argument: directive.transformed_argument,
                                         modifiers: directive.modifiers.clone(),
                                         value: directive.value.clone(),
