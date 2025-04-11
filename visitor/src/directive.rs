@@ -3,7 +3,7 @@ use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::*,
-        atoms::JsWord,
+        atoms::Atom,
         utils::{quote_ident, quote_str},
     },
     plugin::errors::HANDLER,
@@ -18,7 +18,7 @@ pub(crate) fn is_directive(jsx_attr: &JSXAttr) -> bool {
 }
 
 pub(crate) struct NormalDirective {
-    pub(crate) name: JsWord,
+    pub(crate) name: Atom,
     pub(crate) argument: Option<Expr>,
     pub(crate) modifiers: Option<Expr>,
     pub(crate) value: Expr,
@@ -106,19 +106,19 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
                     }
                 }
             } else {
-                modifiers = Some(splitted.map(JsWord::from).collect());
+                modifiers = Some(splitted.map(Atom::from).collect());
             }
         } else {
-            modifiers = Some(splitted.map(JsWord::from).collect());
+            modifiers = Some(splitted.map(Atom::from).collect());
             value = (**expr).clone();
         }
     } else {
-        modifiers = Some(splitted.map(JsWord::from).collect());
+        modifiers = Some(splitted.map(Atom::from).collect());
         value = Expr::Ident(quote_ident!("").into());
     }
 
     Directive::Normal(NormalDirective {
-        name: JsWord::from(name),
+        name: Atom::from(name),
         argument: if modifiers
             .as_ref()
             .map(|modifiers| !modifiers.is_empty())
@@ -143,7 +143,7 @@ pub(crate) fn parse_directive(jsx_attr: &JSXAttr, is_component: bool) -> Directi
     })
 }
 
-fn parse_modifiers(exprs: &[Option<ExprOrSpread>]) -> BTreeSet<JsWord> {
+fn parse_modifiers(exprs: &[Option<ExprOrSpread>]) -> BTreeSet<Atom> {
     exprs
         .iter()
         .filter_map(|expr| match expr {
@@ -275,10 +275,10 @@ fn parse_v_model_directive(
             if is_component && argument.is_none() {
                 argument = Some(Expr::Lit(Lit::Null(Null { span: DUMMY_SP })));
             }
-            modifiers = Some(splitted_attr_name.map(JsWord::from).collect());
+            modifiers = Some(splitted_attr_name.map(Atom::from).collect());
         }
     } else {
-        modifiers = Some(splitted_attr_name.map(JsWord::from).collect());
+        modifiers = Some(splitted_attr_name.map(Atom::from).collect());
         value = attr_value.clone();
     }
 
@@ -309,7 +309,7 @@ fn parse_v_model_directive(
     })
 }
 
-fn transform_modifiers(modifiers: BTreeSet<JsWord>, quote_prop: bool) -> Option<Expr> {
+fn transform_modifiers(modifiers: BTreeSet<Atom>, quote_prop: bool) -> Option<Expr> {
     if modifiers.is_empty() {
         None
     } else {

@@ -5,7 +5,7 @@ use swc_core::{
     common::{comments::Comments, EqIgnoreSpan, Span, Spanned, DUMMY_SP},
     ecma::{
         ast::*,
-        atoms::{js_word, JsWord},
+        atoms::{atom, Atom},
         utils::{quote_ident, quote_str},
     },
     plugin::errors::HANDLER,
@@ -19,7 +19,7 @@ enum RefinedTsTypeElement {
 }
 
 struct PropIr {
-    types: IndexSet<Option<JsWord>>,
+    types: IndexSet<Option<Atom>>,
     required: bool,
 }
 
@@ -257,7 +257,7 @@ where
                         ..
                     }) => {
                         let prop_name = extract_prop_name(*key, computed);
-                        let ty = Some(js_word!("Function"));
+                        let ty = Some(atom!("Function"));
                         if let Some((_, ir)) = irs
                             .iter_mut()
                             .find(|(key, _)| prop_name.eq_ignore_span(key))
@@ -587,7 +587,7 @@ where
         }
     }
 
-    fn resolve_string_or_union_strings(&self, ty: &TsType) -> Vec<JsWord> {
+    fn resolve_string_or_union_strings(&self, ty: &TsType) -> Vec<Atom> {
         match ty {
             TsType::TsLitType(TsLitType {
                 lit: TsLit::Str(key),
@@ -941,30 +941,30 @@ where
         }
     }
 
-    fn infer_runtime_type(&self, ty: &TsType) -> IndexSet<Option<JsWord>> {
+    fn infer_runtime_type(&self, ty: &TsType) -> IndexSet<Option<Atom>> {
         let mut runtime_types = IndexSet::with_capacity(1);
         match ty {
             TsType::TsKeywordType(keyword) => match keyword.kind {
                 TsKeywordTypeKind::TsStringKeyword => {
-                    runtime_types.insert(Some(js_word!("String")));
+                    runtime_types.insert(Some(atom!("String")));
                 }
                 TsKeywordTypeKind::TsNumberKeyword => {
-                    runtime_types.insert(Some(js_word!("Number")));
+                    runtime_types.insert(Some(atom!("Number")));
                 }
                 TsKeywordTypeKind::TsBooleanKeyword => {
-                    runtime_types.insert(Some(js_word!("Boolean")));
+                    runtime_types.insert(Some(atom!("Boolean")));
                 }
                 TsKeywordTypeKind::TsObjectKeyword => {
-                    runtime_types.insert(Some(js_word!("Object")));
+                    runtime_types.insert(Some(atom!("Object")));
                 }
                 TsKeywordTypeKind::TsNullKeyword => {
                     runtime_types.insert(None);
                 }
                 TsKeywordTypeKind::TsBigIntKeyword => {
-                    runtime_types.insert(Some(js_word!("BigInt")));
+                    runtime_types.insert(Some(atom!("BigInt")));
                 }
                 TsKeywordTypeKind::TsSymbolKeyword => {
-                    runtime_types.insert(Some(js_word!("Symbol")));
+                    runtime_types.insert(Some(atom!("Symbol")));
                 }
                 _ => {
                     runtime_types.insert(None);
@@ -975,27 +975,27 @@ where
                     if let TsTypeElement::TsCallSignatureDecl(..)
                     | TsTypeElement::TsConstructSignatureDecl(..) = member
                     {
-                        runtime_types.insert(Some(js_word!("Function")));
+                        runtime_types.insert(Some(atom!("Function")));
                     } else {
-                        runtime_types.insert(Some(js_word!("Object")));
+                        runtime_types.insert(Some(atom!("Object")));
                     }
                 });
             }
             TsType::TsFnOrConstructorType(..) => {
-                runtime_types.insert(Some(js_word!("Function")));
+                runtime_types.insert(Some(atom!("Function")));
             }
             TsType::TsArrayType(..) | TsType::TsTupleType(..) => {
-                runtime_types.insert(Some(js_word!("Array")));
+                runtime_types.insert(Some(atom!("Array")));
             }
             TsType::TsLitType(TsLitType { lit, .. }) => match lit {
                 TsLit::Str(..) | TsLit::Tpl(..) => {
-                    runtime_types.insert(Some(js_word!("String")));
+                    runtime_types.insert(Some(atom!("String")));
                 }
                 TsLit::Bool(..) => {
-                    runtime_types.insert(Some(js_word!("Boolean")));
+                    runtime_types.insert(Some(atom!("Boolean")));
                 }
                 TsLit::Number(..) | TsLit::BigInt(..) => {
-                    runtime_types.insert(Some(js_word!("Number")));
+                    runtime_types.insert(Some(atom!("Number")));
                 }
             },
             TsType::TsTypeRef(TsTypeRef {
@@ -1015,9 +1015,9 @@ where
                         if let TsTypeElement::TsCallSignatureDecl(..)
                         | TsTypeElement::TsConstructSignatureDecl(..) = element
                         {
-                            runtime_types.insert(Some(js_word!("Function")));
+                            runtime_types.insert(Some(atom!("Function")));
                         } else {
-                            runtime_types.insert(Some(js_word!("Object")));
+                            runtime_types.insert(Some(atom!("Object")));
                         }
                     });
                 } else {
@@ -1028,13 +1028,13 @@ where
                         }
                         "Partial" | "Required" | "Readonly" | "Record" | "Pick" | "Omit"
                         | "InstanceType" => {
-                            runtime_types.insert(Some(js_word!("Object")));
+                            runtime_types.insert(Some(atom!("Object")));
                         }
                         "Uppercase" | "Lowercase" | "Capitalize" | "Uncapitalize" => {
-                            runtime_types.insert(Some(js_word!("String")));
+                            runtime_types.insert(Some(atom!("String")));
                         }
                         "Parameters" | "ConstructorParameters" => {
-                            runtime_types.insert(Some(js_word!("Array")));
+                            runtime_types.insert(Some(atom!("Array")));
                         }
                         "NonNullable" => {
                             if let Some(ty) = type_params
@@ -1044,7 +1044,7 @@ where
                                 let types = self.infer_runtime_type(ty);
                                 runtime_types.extend(types.into_iter().filter(|ty| ty.is_some()));
                             } else {
-                                runtime_types.insert(Some(js_word!("Object")));
+                                runtime_types.insert(Some(atom!("Object")));
                             }
                         }
                         "Exclude" | "OmitThisParameter" => {
@@ -1054,7 +1054,7 @@ where
                             {
                                 runtime_types.extend(self.infer_runtime_type(ty));
                             } else {
-                                runtime_types.insert(Some(js_word!("Object")));
+                                runtime_types.insert(Some(atom!("Object")));
                             }
                         }
                         "Extract" => {
@@ -1064,11 +1064,11 @@ where
                             {
                                 runtime_types.extend(self.infer_runtime_type(ty));
                             } else {
-                                runtime_types.insert(Some(js_word!("Object")));
+                                runtime_types.insert(Some(atom!("Object")));
                             }
                         }
                         _ => {
-                            runtime_types.insert(Some(js_word!("Object")));
+                            runtime_types.insert(Some(atom!("Object")));
                         }
                     }
                 }
@@ -1093,7 +1093,7 @@ where
                 runtime_types.extend(self.infer_runtime_type(type_ann));
             }
             _ => {
-                runtime_types.insert(Some(js_word!("Object")));
+                runtime_types.insert(Some(atom!("Object")));
             }
         };
         runtime_types
