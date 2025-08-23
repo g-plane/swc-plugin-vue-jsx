@@ -25,10 +25,10 @@ jobs:
         with:
           toolchain: stable
           target: wasm32-unknown-unknown
-      - run: pnpm publish --provenance --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npx npm@latest publish
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: cratesio-auth
       - name: Publish crates
         run: cargo publish -p swc-vue-jsx-visitor
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.cratesio-auth.outputs.token }}
